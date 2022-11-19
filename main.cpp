@@ -367,6 +367,16 @@ void prune(std::vector<double> &original) {
     original.swap(pruned);
 }
 
+std::vector<std::vector<double>> initialize_values() {
+    std::vector<std::vector<double>> result;
+    result.emplace_back(std::vector<double>()); // This one stays empty because we want the vector to be 1-indexed.
+    result.emplace_back(std::vector<double>());
+    for (int i = 1; i <= 10; i++) {
+        result[1].emplace_back(i);
+    }
+    return result;
+}
+
 void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t depth) {
     assert(values_per_depth.size() == depth);
     values_per_depth.emplace_back(std::vector<double>());
@@ -381,39 +391,20 @@ void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t 
 
 int main() {
     double_t to_find = 9.8757731789244900612;
+    auto values_per_depth = initialize_values();
 
-    std::vector<std::vector<double>> valuesPerDepth;
-    valuesPerDepth.emplace_back(std::vector<double>()); // this stays empty because we want to be 1-indexed
-    valuesPerDepth.emplace_back(std::vector<double>());
-    for (int i = 1; i <= 10; i++) {
-        valuesPerDepth[1].emplace_back(i);
+    for (size_t depth = 2; depth <= 6; depth++) {
+        findAndPrint(true, depth, values_per_depth, to_find);
+        std::cout << std::endl;
+
+        generate_values(values_per_depth, depth);
     }
-    findAndPrint(true, 2, valuesPerDepth, to_find);
-    std::cout << std::endl;
-
-    generate_values(valuesPerDepth, 2);
-    findAndPrint(true, 3, valuesPerDepth, to_find);
-    std::cout << std::endl;
-
-    generate_values(valuesPerDepth, 3);
-    findAndPrint(true, 4, valuesPerDepth, to_find);
-    std::cout << std::endl;
-
-    generate_values(valuesPerDepth, 4);
-    findAndPrint(true, 5, valuesPerDepth, to_find);
-    std::cout << std::endl;
-
-    generate_values(valuesPerDepth, 5);
-    findAndPrint(true, 6, valuesPerDepth, to_find);
-    std::cout << std::endl;
-
-    generate_values(valuesPerDepth, 6);
     long count = 0, notEqual = 0;
-    for (double a : valuesPerDepth[6]) {
+    for (double a : values_per_depth[6]) {
         if (a < 0) {
             double x = -a;
-            size_t index = approxBinSearch(valuesPerDepth[6], x); {
-                if (valuesPerDepth[6][index] == x) {
+            size_t index = approxBinSearch(values_per_depth[6], x); {
+                if (values_per_depth[6][index] == x) {
                     count++;
                 } else {
                     notEqual++;
@@ -423,9 +414,9 @@ int main() {
     }
     std::cout << count << " " << notEqual << std::endl;
 
-    findAndPrint(true, 7, valuesPerDepth, to_find);
+    findAndPrint(true, 7, values_per_depth, to_find);
     std::cout << std::endl;
-    findAndPrint(true, 8, valuesPerDepth, to_find);
+    findAndPrint(true, 8, values_per_depth, to_find);
     std::cout << std::endl;
 
     /*for (double a : valuesPerDepth.back()) {
