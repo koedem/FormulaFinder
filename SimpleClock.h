@@ -1,5 +1,4 @@
-#ifndef FORMULAFINDER_SIMPLECLOCK_H
-#define FORMULAFINDER_SIMPLECLOCK_H
+#pragma once
 
 #include <chrono>
 #include <iostream>
@@ -20,6 +19,3 @@ public:
         return elapsed_seconds.count();
     }
 };
-
-
-#endif //FORMULAFINDER_SIMPLECLOCK_H
