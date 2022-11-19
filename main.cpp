@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <cassert>
 #include "math.h"
 #include "SimpleClock.h"
 
@@ -63,7 +64,7 @@ void findAndPrint(bool root, size_t depth, std::vector<std::vector<double>> &sou
     double highscore = abs(to_find) + 10;
     double operand1;
     if (depth == 1) {
-        for (double x : sources[0]) {
+        for (double x : sources[1]) {
             if (abs(to_find - x) < highscore) {
                 highscore = abs(to_find - x);
                 operand1 = x;
@@ -76,13 +77,13 @@ void findAndPrint(bool root, size_t depth, std::vector<std::vector<double>> &sou
     std::string best_op;
     size_t larger_depth = depth - 1, depth1;
     double operand2;
-    if (larger_depth > sources.size()) {
-        std::cout << "Jumping from search depth " << larger_depth << " down to " << sources.size() << std::endl;
+    if (larger_depth >= sources.size()) {
+        std::cout << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
         larger_depth = sources.size();
     }
-    while (larger_depth >= (depth + 1) / 2) {
-        const std::vector<double>& large = sources[larger_depth - 1];
-        const std::vector<double>& small = sources[depth - larger_depth - 1];
+    while (larger_depth * 2 >= depth) {
+        const std::vector<double>& large = sources[larger_depth];
+        const std::vector<double>& small = sources[depth - larger_depth];
         if (root) {
             clock2.start();
         }
@@ -366,85 +367,98 @@ void prune(std::vector<double> &original) {
     original.swap(pruned);
 }
 
+void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t depth) {
+    assert(values_per_depth.size() == depth);
+    values_per_depth.emplace_back(std::vector<double>());
+    size_t large_half = depth - 1;
+    while (large_half * 2 >= depth) { // otherwise it's not the larger half
+        generator(values_per_depth[large_half], values_per_depth[depth - large_half], values_per_depth[depth]);
+        std::sort(values_per_depth[depth].begin(), values_per_depth[depth].end());
+        prune(values_per_depth[depth]);
+        large_half--;
+    }
+}
+
 int main() {
     double_t to_find = 9.8757731789244900612;
 
     std::vector<std::vector<double>> valuesPerDepth;
+    valuesPerDepth.emplace_back(std::vector<double>()); // this stays empty because we want to be 1-indexed
     valuesPerDepth.emplace_back(std::vector<double>());
     for (int i = 1; i <= 10; i++) {
-        valuesPerDepth[0].emplace_back(i);
+        valuesPerDepth[1].emplace_back(i);
     }
     findAndPrint(true, 2, valuesPerDepth, to_find);
     std::cout << std::endl;
 
     valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[0], valuesPerDepth[0], valuesPerDepth[1]);
+    generator(valuesPerDepth[1], valuesPerDepth[1], valuesPerDepth[2]);
 
-    std::sort(valuesPerDepth[1].begin(), valuesPerDepth[1].end());
-    prune(valuesPerDepth[1]);
+    std::sort(valuesPerDepth[2].begin(), valuesPerDepth[2].end());
+    prune(valuesPerDepth[2]);
     findAndPrint(true, 3, valuesPerDepth, to_find);
     std::cout << std::endl;
 
 
     valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[1], valuesPerDepth[0], valuesPerDepth[2]);
+    generator(valuesPerDepth[2], valuesPerDepth[1], valuesPerDepth[3]);
 
-    std::sort(valuesPerDepth[2].begin(), valuesPerDepth[2].end());
-    prune(valuesPerDepth[2]);
+    std::sort(valuesPerDepth[3].begin(), valuesPerDepth[3].end());
+    prune(valuesPerDepth[3]);
     findAndPrint(true, 4, valuesPerDepth, to_find);
     std::cout << std::endl;
 
 
     valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[2], valuesPerDepth[0], valuesPerDepth[3]);
+    generator(valuesPerDepth[3], valuesPerDepth[1], valuesPerDepth[4]);
 
-    std::sort(valuesPerDepth[3].begin(), valuesPerDepth[3].end());
-    prune(valuesPerDepth[3]);
+    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
+    prune(valuesPerDepth[4]);
 
-    generator(valuesPerDepth[1], valuesPerDepth[1], valuesPerDepth[3]);
+    generator(valuesPerDepth[2], valuesPerDepth[2], valuesPerDepth[4]);
 
-    std::sort(valuesPerDepth[3].begin(), valuesPerDepth[3].end());
-    prune(valuesPerDepth[3]);
+    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
+    prune(valuesPerDepth[4]);
     findAndPrint(true, 5, valuesPerDepth, to_find);
     std::cout << std::endl;
 
 
     valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[3], valuesPerDepth[0], valuesPerDepth[4]);
+    generator(valuesPerDepth[4], valuesPerDepth[1], valuesPerDepth[5]);
 
-    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
-    prune(valuesPerDepth[4]);
+    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
+    prune(valuesPerDepth[5]);
 
-    generator(valuesPerDepth[2], valuesPerDepth[1], valuesPerDepth[4]);
+    generator(valuesPerDepth[3], valuesPerDepth[2], valuesPerDepth[5]);
 
-    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
-    prune(valuesPerDepth[4]);
+    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
+    prune(valuesPerDepth[5]);
     findAndPrint(true, 6, valuesPerDepth, to_find);
     std::cout << std::endl;
 
 
     valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[4], valuesPerDepth[0], valuesPerDepth[5]);
+    generator(valuesPerDepth[5], valuesPerDepth[1], valuesPerDepth[6]);
 
-    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
-    prune(valuesPerDepth[5]);
+    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
+    prune(valuesPerDepth[6]);
 
-    generator(valuesPerDepth[3], valuesPerDepth[1], valuesPerDepth[5]);
+    generator(valuesPerDepth[4], valuesPerDepth[2], valuesPerDepth[6]);
 
-    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
-    prune(valuesPerDepth[5]);
+    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
+    prune(valuesPerDepth[6]);
 
-    generator(valuesPerDepth[2], valuesPerDepth[2], valuesPerDepth[5]);
+    generator(valuesPerDepth[3], valuesPerDepth[3], valuesPerDepth[6]);
 
-    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
-    prune(valuesPerDepth[5]);
+    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
+    prune(valuesPerDepth[6]);
 
     long count = 0, notEqual = 0;
-    for (double a : valuesPerDepth[5]) {
+    for (double a : valuesPerDepth[6]) {
         if (a < 0) {
             double x = -a;
-            size_t index = approxBinSearch(valuesPerDepth[5], x); {
-                if (valuesPerDepth[5][index] == x) {
+            size_t index = approxBinSearch(valuesPerDepth[6], x); {
+                if (valuesPerDepth[6][index] == x) {
                     count++;
                 } else {
                     notEqual++;
