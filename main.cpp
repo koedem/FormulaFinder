@@ -391,68 +391,23 @@ int main() {
     findAndPrint(true, 2, valuesPerDepth, to_find);
     std::cout << std::endl;
 
-    valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[1], valuesPerDepth[1], valuesPerDepth[2]);
-
-    std::sort(valuesPerDepth[2].begin(), valuesPerDepth[2].end());
-    prune(valuesPerDepth[2]);
+    generate_values(valuesPerDepth, 2);
     findAndPrint(true, 3, valuesPerDepth, to_find);
     std::cout << std::endl;
 
-
-    valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[2], valuesPerDepth[1], valuesPerDepth[3]);
-
-    std::sort(valuesPerDepth[3].begin(), valuesPerDepth[3].end());
-    prune(valuesPerDepth[3]);
+    generate_values(valuesPerDepth, 3);
     findAndPrint(true, 4, valuesPerDepth, to_find);
     std::cout << std::endl;
 
-
-    valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[3], valuesPerDepth[1], valuesPerDepth[4]);
-
-    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
-    prune(valuesPerDepth[4]);
-
-    generator(valuesPerDepth[2], valuesPerDepth[2], valuesPerDepth[4]);
-
-    std::sort(valuesPerDepth[4].begin(), valuesPerDepth[4].end());
-    prune(valuesPerDepth[4]);
+    generate_values(valuesPerDepth, 4);
     findAndPrint(true, 5, valuesPerDepth, to_find);
     std::cout << std::endl;
 
-
-    valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[4], valuesPerDepth[1], valuesPerDepth[5]);
-
-    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
-    prune(valuesPerDepth[5]);
-
-    generator(valuesPerDepth[3], valuesPerDepth[2], valuesPerDepth[5]);
-
-    std::sort(valuesPerDepth[5].begin(), valuesPerDepth[5].end());
-    prune(valuesPerDepth[5]);
+    generate_values(valuesPerDepth, 5);
     findAndPrint(true, 6, valuesPerDepth, to_find);
     std::cout << std::endl;
 
-
-    valuesPerDepth.emplace_back(std::vector<double>());
-    generator(valuesPerDepth[5], valuesPerDepth[1], valuesPerDepth[6]);
-
-    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
-    prune(valuesPerDepth[6]);
-
-    generator(valuesPerDepth[4], valuesPerDepth[2], valuesPerDepth[6]);
-
-    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
-    prune(valuesPerDepth[6]);
-
-    generator(valuesPerDepth[3], valuesPerDepth[3], valuesPerDepth[6]);
-
-    std::sort(valuesPerDepth[6].begin(), valuesPerDepth[6].end());
-    prune(valuesPerDepth[6]);
-
+    generate_values(valuesPerDepth, 6);
     long count = 0, notEqual = 0;
     for (double a : valuesPerDepth[6]) {
         if (a < 0) {
