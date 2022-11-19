@@ -11,7 +11,7 @@ class MergeFinder {
 public:
     /*template<bool ROOT>
     void find_best_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find, SimpleClock& clock,
-                       double& highscore, double& operand1, double& operand2, std::string& best_op, double& depth1, const double& larger_depth) {
+                       double& highscore, double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t& larger_depth) {
         if constexpr (ROOT) {
             clock.start();
         }
@@ -37,6 +37,25 @@ public:
 
     }*/
 
+    template<bool ROOT, size_t OP>
+    void brute_force_search(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+                     double& highscore, double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t& larger_depth) {
+        for (double l : large) {
+            for (double s : small) {
+                double x = Utils::apply_operator<OP>(l, s);
+                if (abs(to_find - x) < highscore) {
+                    highscore = abs(to_find - x);
+                    best_op = op_strings[OP];
+                    operand1 = l;
+                    operand2 = s;
+                    depth1 = larger_depth;
+                }
+                if (x > to_find) {
+
+                }
+            }
+        }
+    }
 
     void find_depth_one(const std::vector<double>& source, double to_find) {
         double highscore = abs(to_find), best_fit;
@@ -201,59 +220,24 @@ public:
                     std::cout << "Div2 " << clock2.end() << std::endl;
                     clock2.start();
                 }
-                for (int i = 0; i < large.size(); i++) {
-                    for (int j = 0; j < small.size(); j++) {
-                        double x = pow(large[i], small[j]);
-                        if (abs(to_find - x) < highscore) {
-                            highscore = abs(to_find - x);
-                            best_op = "pow";
-                            operand1 = large[i];
-                            operand2 = small[j];
-                            depth1 = larger_depth;
-                        }
-                        if (x > to_find) {
-
-                        }
-                    }
-                }
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
                 if constexpr (ROOT) {
                     std::cout << "Pow1 " << clock2.end() << std::endl;
                     clock2.start();
                 }
             } else {
-                for (int i = 0; i < large.size(); i++) {
-                    for (int j = 0; j < small.size(); j++) {
-                        double x = large[i] * small[j];
-                        if (abs(to_find - x) < highscore) {
-                            highscore = abs(to_find - x);
-                            best_op = '*';
-                            operand1 = large[i];
-                            operand2 = small[j];
-                            depth1 = larger_depth;
-                        }
-                    }
-                }
+                brute_force_search<ROOT, Utils::MUL>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
                 if constexpr (ROOT) {
                     std::cout << "Slow Mul " << clock2.end() << std::endl;
                     clock2.start();
                 }
-                for (int i = 0; i < large.size(); i++) {
-                    for (int j = 0; j < small.size(); j++) {
-                        double x = large[i] / small[j];
-                        if (abs(to_find - x) < highscore) {
-                            highscore = abs(to_find - x);
-                            best_op = '/';
-                            operand1 = large[i];
-                            operand2 = small[j];
-                            depth1 = larger_depth;
-                        }
-                    }
-                }
 
+                brute_force_search<ROOT, Utils::DIV1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
                 if constexpr (ROOT) {
                     std::cout << "Slow Div1 " << clock2.end() << std::endl;
                     clock2.start();
                 }
+
                 for (int i = 0; i < large.size(); i++) {
                     for (int j = 0; j < small.size(); j++) {
                         double x = small[j] / large[i];
@@ -270,18 +254,8 @@ public:
                     std::cout << "Slow Div2 " << clock2.end() << std::endl;
                     clock2.start();
                 }
-                for (int i = 0; i < large.size(); i++) {
-                    for (int j = 0; j < small.size(); j++) {
-                        double x = pow(large[i], small[j]);
-                        if (abs(to_find - x) < highscore) {
-                            highscore = abs(to_find - x);
-                            best_op = "pow";
-                            operand1 = large[i];
-                            operand2 = small[j];
-                            depth1 = larger_depth;
-                        }
-                    }
-                }
+
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
                 if constexpr (ROOT) {
                     std::cout << "Slow Pow1 " << clock2.end() << std::endl;
                     clock2.start();
@@ -351,4 +325,7 @@ public:
 
 private:
     SimpleClock& clock1;
+
+    static constexpr std::string_view op_strings[] = {[Utils::ADD] = "+", [Utils::SUB1] = "-", [Utils::SUB2] = "-",
+          [Utils::MUL] = "*", [Utils::DIV1] = "/", [Utils::DIV2] = "/", [Utils::POW1] = "pow", [Utils::POW2] = "pow"};
 };
