@@ -37,9 +37,9 @@ public:
 
     }*/
 
-    template<size_t OP>
+    template<bool ROOT, size_t OP>
     void brute_force_search(const std::vector<double>& first, const std::vector<double>& second, double to_find, double& highscore,
-                            double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t first_depth) {
+                            double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t first_depth, SimpleClock& clock2) {
         for (double a : first) {
             for (double b : second) {
                 double x = Utils::apply_operator<OP>(a, b);
@@ -51,6 +51,11 @@ public:
                     depth1 = first_depth;
                 }
             }
+        }
+
+        if constexpr (ROOT) {
+            std::cout << "Slow " << op_strings[OP] << " " << clock2.end() << std::endl;
+            clock2.start();
         }
     }
 
@@ -217,54 +222,18 @@ public:
                     std::cout << "Div2 " << clock2.end() << std::endl;
                     clock2.start();
                 }
-                brute_force_search<Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
-                if constexpr (ROOT) {
-                    std::cout << "Pow1 " << clock2.end() << std::endl;
-                    clock2.start();
-                }
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth, clock2);
             } else {
-                brute_force_search<Utils::MUL>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
-                if constexpr (ROOT) {
-                    std::cout << "Slow Mul " << clock2.end() << std::endl;
-                    clock2.start();
-                }
-
-                brute_force_search<Utils::DIV1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
-                if constexpr (ROOT) {
-                    std::cout << "Slow Div1 " << clock2.end() << std::endl;
-                    clock2.start();
-                }
-
-                brute_force_search<Utils::DIV2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth);
-                if constexpr (ROOT) {
-                    std::cout << "Slow Div2 " << clock2.end() << std::endl;
-                    clock2.start();
-                }
-
-                brute_force_search<Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
-                if constexpr (ROOT) {
-                    std::cout << "Slow Pow1 " << clock2.end() << std::endl;
-                    clock2.start();
-                }
+                brute_force_search<ROOT, Utils::MUL>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::DIV1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::DIV2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth, clock2);
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth, clock2);
             }
 
-            brute_force_search<Utils::POW2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth);
-            if constexpr (ROOT) {
-                std::cout << "Slow Pow2 " << clock2.end() << std::endl;
-                clock2.start();
-            }
+            brute_force_search<ROOT, Utils::POW2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth, clock2);
+            brute_force_search<ROOT, Utils::LOG1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth, clock2);
+            brute_force_search<ROOT, Utils::LOG2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth, clock2);
 
-            brute_force_search<Utils::LOG1>(large, small, to_find, highscore, operand1, operand2, best_op, depth1, larger_depth);
-            if constexpr (ROOT) {
-                std::cout << "Slow Log1 " << clock2.end() << std::endl;
-                clock2.start();
-            }
-
-            brute_force_search<Utils::LOG2>(large, small, to_find, highscore, operand2, operand1, best_op, depth1, depth - larger_depth);
-            if constexpr (ROOT) {
-                std::cout << "Slow Log2 " << clock2.end() << std::endl;
-                clock2.start();
-            }
             larger_depth--;
         }
         if constexpr (ROOT) {
