@@ -53,10 +53,14 @@ public:
             return pow(a, b);
         } else if constexpr (OP == POW2) {
             return pow(b, a);
+        } else if constexpr (OP == LOG1) {
+            return log(a) / log(b);
+        } else if constexpr (OP == LOG2) {
+            return log(b) / log(a);
         }
     }
 
-    enum Op { ADD = 0, SUB1 = 1, SUB2 = 2, MUL = 3, DIV1 = 4, DIV2 = 5, POW1 = 6, POW2 = 7 };
+    enum Op { ADD = 0, SUB1 = 1, SUB2 = 2, MUL = 3, DIV1 = 4, DIV2 = 5, POW1 = 6, POW2 = 7, LOG1 = 8, LOG2 = 9 };
 
 private:
     Utils() = default;
