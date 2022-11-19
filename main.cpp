@@ -389,6 +389,23 @@ void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t 
     }
 }
 
+void count_matching_negative_numbers(const std::vector<double> values) {
+    long count = 0, notEqual = 0;
+    for (double a : values) {
+        if (a < 0) {
+            double x = -a;
+            size_t index = approxBinSearch(values, x); {
+                if (values[index] == x) {
+                    count++;
+                } else {
+                    notEqual++;
+                }
+            }
+        }
+    }
+    std::cout << "Of the " << count << " negative numbers, " << notEqual << " are not found among the positives." << std::endl;
+}
+
 int main() {
     double_t to_find = 9.8757731789244900612;
     auto values_per_depth = initialize_values();
@@ -398,30 +415,13 @@ int main() {
         std::cout << std::endl;
 
         generate_values(values_per_depth, depth);
+        count_matching_negative_numbers(values_per_depth[depth]);
     }
-    long count = 0, notEqual = 0;
-    for (double a : values_per_depth[6]) {
-        if (a < 0) {
-            double x = -a;
-            size_t index = approxBinSearch(values_per_depth[6], x); {
-                if (values_per_depth[6][index] == x) {
-                    count++;
-                } else {
-                    notEqual++;
-                }
-            }
-        }
-    }
-    std::cout << count << " " << notEqual << std::endl;
 
     findAndPrint(true, 7, values_per_depth, to_find);
     std::cout << std::endl;
     findAndPrint(true, 8, values_per_depth, to_find);
     std::cout << std::endl;
-
-    /*for (double a : valuesPerDepth.back()) {
-        std::cout << a << " ";
-    }*/
     return 0;
 }
 /*
