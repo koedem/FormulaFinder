@@ -79,23 +79,12 @@ void findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, doubl
     }
     double highscore = abs(to_find) + 10;
     double operand1;
-    if (depth == 1) {
-        for (double x : sources[1]) {
-            if (abs(to_find - x) < highscore) {
-                highscore = abs(to_find - x);
-                operand1 = x;
-            }
-        }
-        std::cout << operand1 << " ";
-        return;
-    }
-
     std::string best_op;
     size_t larger_depth = depth - 1, depth1;
     double operand2;
     if (larger_depth >= sources.size()) {
         std::cout << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
-        larger_depth = sources.size();
+        larger_depth = sources.size() - 1;
     }
     while (larger_depth * 2 >= depth) {
         const std::vector<double>& large = sources[larger_depth];
