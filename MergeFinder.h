@@ -151,8 +151,8 @@ public:
                 if (std::abs(to_find - x) < best.absolute_difference) {
                     best.absolute_difference = std::abs(to_find - x);
                     best.operation = Utils::SUB2;
-                    best.operand1 = small[j];
-                    best.operand2 = large[i];
+                    best.operand1 = large[i];
+                    best.operand2 = small[j];
                     depth1 = depth - larger_depth;
                 }
                 if (x > to_find) {
@@ -214,8 +214,8 @@ public:
                     if (std::abs(to_find - x) < best.absolute_difference) {
                         best.absolute_difference = std::abs(to_find - x);
                         best.operation = Utils::DIV2;
-                        best.operand1 = small[j];
-                        best.operand2 = large[i];
+                        best.operand1 = large[i];
+                        best.operand2 = small[j];
                         depth1 = depth - larger_depth;
                     }
                     if (x > to_find) {
@@ -243,11 +243,23 @@ public:
             larger_depth--;
         }
         if constexpr (ROOT) {
-            std::cout << clock1.end() << " seconds, depth: " << depth << ", high_score: " << best.absolute_difference << "; x =  ";
+            std::cout << clock1.end() << " seconds, depth: " << depth << ", high score: " << best.absolute_difference << "; x =  ";
         }
         std::cout << op_strings[best.operation] << " ";
-        findAndPrint<false>(depth1, sources, best.operand1);
-        findAndPrint<false>(depth - depth1, sources, best.operand2);
+
+        switch (best.operation) {
+            case Utils::SUB2:
+            case Utils::DIV2:
+            case Utils::POW2:
+            case Utils::LOG2:
+                findAndPrint<false>(depth1, sources, best.operand2);
+                findAndPrint<false>(depth - depth1, sources, best.operand1);
+                break;
+            default:
+                findAndPrint<false>(depth1, sources, best.operand1);
+                findAndPrint<false>(depth - depth1, sources, best.operand2);
+                break;
+        }
     }
 
     explicit MergeFinder(SimpleClock& clock1) : clock1(clock1) {
