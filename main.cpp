@@ -68,7 +68,13 @@ void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t 
     size_t large_half = depth - 1;
     while (large_half * 2 >= depth) { // otherwise it's not the larger half
         generator(values_per_depth[large_half], values_per_depth[depth - large_half], values_per_depth[depth]);
-        std::sort(values_per_depth[depth].begin(), values_per_depth[depth].end());
+        clock1.start();
+        std::sort(values_per_depth[depth].begin() + previous_fill, values_per_depth[depth].end()); // Don't need to sort what is already sorted
+        if (previous_fill != 0) { // But in that case we need to merge the two sorted halves.
+            std::inplace_merge(values_per_depth[depth].begin(), values_per_depth[depth].begin() + previous_fill,
+                               values_per_depth[depth].end());
+        }
+        std::cout << clock1.end() << " seconds used for sorting." << std::endl;
         prune(values_per_depth[depth]);
         previous_fill = values_per_depth[depth].size();
         large_half--;
