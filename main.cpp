@@ -21,13 +21,17 @@ void generator(const std::vector<double> &source1, const std::vector<double> &so
             result.emplace_back(a * b);
             result.emplace_back(a / b);
             result.emplace_back(b / a);
-            result.emplace_back(pow(a,b));
-            result.emplace_back(pow(b,a));
-            //result.emplace_back(log(a) / log(b));
-            //result.emplace_back(log(b) / log(a));
+            if (a > 0) { // For negative a, this can lead to nans, in case of integer b there is still little reason to use the formula like that.
+                result.emplace_back(pow(a, b));
+            }
+            if (b > 0) {
+                result.emplace_back(pow(b, a));
+            }
         }
-        result.emplace_back(sqrt(a)); // could also be done by pow 1/2 but that costs an extra depth
-        result.emplace_back(log(a));
+        if (a > 0) {
+            result.emplace_back(sqrt(a));
+            result.emplace_back(log(a));
+        }
     }
     std::cout << clock1.end() << " seconds, end generation." << std::endl;
 }
@@ -60,11 +64,13 @@ std::vector<std::vector<double>> initialize_values() {
 void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t depth) {
     assert(values_per_depth.size() == depth);
     values_per_depth.emplace_back(std::vector<double>());
+    size_t previous_fill = 0;
     size_t large_half = depth - 1;
     while (large_half * 2 >= depth) { // otherwise it's not the larger half
         generator(values_per_depth[large_half], values_per_depth[depth - large_half], values_per_depth[depth]);
         std::sort(values_per_depth[depth].begin(), values_per_depth[depth].end());
         prune(values_per_depth[depth]);
+        previous_fill = values_per_depth[depth].size();
         large_half--;
     }
 }
