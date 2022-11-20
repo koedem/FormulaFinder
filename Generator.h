@@ -24,22 +24,29 @@ public:
         values_per_depth.emplace_back(std::vector<double>());
         size_t previous_fill = 0;
         size_t large_half = depth - 1;
-        while (large_half * 2 >= depth) { // otherwise it's not the larger half
+        while (large_half * 2 >= depth) { // Otherwise it's not the larger half.
             generator(values_per_depth[large_half], values_per_depth[depth - large_half], values_per_depth[depth]);
             clock.start();
-            std::sort(values_per_depth[depth].begin() + previous_fill, values_per_depth[depth].end()); // Don't need to sort what is already sorted
+            std::sort(values_per_depth[depth].begin() + previous_fill, values_per_depth[depth].end()); // Don't need to sort what is already sorted.
             if (previous_fill != 0) { // But in that case we need to merge the two sorted halves.
                 std::inplace_merge(values_per_depth[depth].begin(), values_per_depth[depth].begin() + previous_fill,
                                    values_per_depth[depth].end());
             }
             std::cout << clock.end() << " seconds used for sorting." << std::endl;
-            prune(values_per_depth[depth]);
+            prune_duplicates(values_per_depth[depth]);
             previous_fill = values_per_depth[depth].size();
             large_half--;
         }
     }
 
 private:
+    /**
+     * This function combines the values of the two inputs through arithmetic operations. These arithmetic operations
+     * include sum, product, exponentiation and more.
+     * @param source1 containing no infinite or NaN values.
+     * @param source2 containing no infinite or NaN values.
+     * @param result all results for OP(x, y) for x in source1, y in source2.
+     */
     static void generator(const std::vector<double> &source1, const std::vector<double> &source2, std::vector<double> &result) {
         std::cout << "Start generation." << std::endl;
         clock.start();
@@ -66,7 +73,11 @@ private:
         std::cout << clock.end() << " seconds, end generation." << std::endl;
     }
 
-    static void prune(std::vector<double> &original) {
+    /**
+     * This function removes all duplicate values from a sorted vector.
+     * @param original values in ascending order, not containing any NaN values.
+     */
+    static void prune_duplicates(std::vector<double> &original) {
         clock.start();
         std::cout << "Start pruning." << std::endl;
         std::vector<double> pruned;

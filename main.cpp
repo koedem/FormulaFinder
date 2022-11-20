@@ -1,6 +1,4 @@
 #include <iostream>
-#include <vector>
-#include <cassert>
 #include <cmath>
 #include "SimpleClock.h"
 #include "MergeFinder.h"
