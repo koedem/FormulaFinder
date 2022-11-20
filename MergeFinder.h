@@ -13,6 +13,7 @@ private:
         double operand1, operand2;
         double absolute_difference;
         Utils::Op operation;
+        size_t depth1; // Remaining depth for operand1
     };
 
 public:
@@ -46,7 +47,7 @@ public:
 
     template<bool ROOT, Utils::Op OP>
     void brute_force_search(const std::vector<double>& first, const std::vector<double>& second, double to_find,
-                            FormulaData& best, size_t& depth1, const size_t first_depth, SimpleClock& clock2) {
+                            FormulaData& best, const size_t first_depth, SimpleClock& clock2) {
         for (double a : first) {
             for (double b : second) {
                 double x = Utils::apply_operator<OP>(a, b);
@@ -55,7 +56,7 @@ public:
                     best.operation = OP;
                     best.operand1 = a;
                     best.operand2 = b;
-                    depth1 = first_depth;
+                    best.depth1 = first_depth;
                 }
             }
         }
@@ -97,7 +98,7 @@ public:
         }
         FormulaData best{};
         best.absolute_difference = std::abs(to_find) + 10;
-        size_t larger_depth = depth - 1, depth1;
+        size_t larger_depth = depth - 1;
         if (larger_depth >= sources.size()) {
             std::cout << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
             larger_depth = sources.size() - 1;
@@ -115,7 +116,7 @@ public:
                     best.operation = Utils::ADD;
                     best.operand1 = large[i];
                     best.operand2 = small[j];
-                    depth1 = larger_depth;
+                    best.depth1 = larger_depth;
                 }
                 if (x > to_find) {
                     j--;
@@ -134,7 +135,7 @@ public:
                     best.operation = Utils::SUB1;
                     best.operand1 = large[i];
                     best.operand2 = small[j];
-                    depth1 = larger_depth;
+                    best.depth1 = larger_depth;
                 }
                 if (x > to_find) {
                     j++;
@@ -153,7 +154,7 @@ public:
                     best.operation = Utils::SUB2;
                     best.operand1 = large[i];
                     best.operand2 = small[j];
-                    depth1 = depth - larger_depth;
+                    best.depth1 = larger_depth;
                 }
                 if (x > to_find) {
                     i++;
@@ -177,7 +178,7 @@ public:
                         best.operation = Utils::MUL;
                         best.operand1 = large[i];
                         best.operand2 = small[j];
-                        depth1 = larger_depth;
+                        best.depth1 = larger_depth;
                     }
                     if (x > to_find) {
                         j--;
@@ -197,7 +198,7 @@ public:
                         best.operation = Utils::DIV1;
                         best.operand1 = large[i];
                         best.operand2 = small[j];
-                        depth1 = larger_depth;
+                        best.depth1 = larger_depth;
                     }
                     if (x > to_find) {
                         j++;
@@ -216,7 +217,7 @@ public:
                         best.operation = Utils::DIV2;
                         best.operand1 = large[i];
                         best.operand2 = small[j];
-                        depth1 = depth - larger_depth;
+                        best.depth1 = larger_depth;
                     }
                     if (x > to_find) {
                         i++;
@@ -228,17 +229,17 @@ public:
                     std::cout << "Div2 " << clock2.end() << std::endl;
                     clock2.start();
                 }
-                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, best, depth1, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, best, larger_depth, clock2);
             } else {
-                brute_force_search<ROOT, Utils::MUL>(large, small, to_find, best, depth1, larger_depth, clock2);
-                brute_force_search<ROOT, Utils::DIV1>(large, small, to_find, best, depth1, larger_depth, clock2);
-                brute_force_search<ROOT, Utils::DIV2>(large, small, to_find, best, depth1, depth - larger_depth, clock2);
-                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, best, depth1, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::MUL>(large, small, to_find, best, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::DIV1>(large, small, to_find, best, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::DIV2>(large, small, to_find, best, larger_depth, clock2);
+                brute_force_search<ROOT, Utils::POW1>(large, small, to_find, best, larger_depth, clock2);
             }
 
-            brute_force_search<ROOT, Utils::POW2>(large, small, to_find, best, depth1, depth - larger_depth, clock2);
-            brute_force_search<ROOT, Utils::LOG1>(large, small, to_find, best, depth1, larger_depth, clock2);
-            brute_force_search<ROOT, Utils::LOG2>(large, small, to_find, best, depth1, depth - larger_depth, clock2);
+            brute_force_search<ROOT, Utils::POW2>(large, small, to_find, best, larger_depth, clock2);
+            brute_force_search<ROOT, Utils::LOG1>(large, small, to_find, best, larger_depth, clock2);
+            brute_force_search<ROOT, Utils::LOG2>(large, small, to_find, best, larger_depth, clock2);
 
             larger_depth--;
         }
@@ -252,12 +253,12 @@ public:
             case Utils::DIV2:
             case Utils::POW2:
             case Utils::LOG2:
-                findAndPrint<false>(depth1, sources, best.operand2);
-                findAndPrint<false>(depth - depth1, sources, best.operand1);
+                findAndPrint<false>(depth - best.depth1, sources, best.operand2);
+                findAndPrint<false>(best.depth1, sources, best.operand1);
                 break;
             default:
-                findAndPrint<false>(depth1, sources, best.operand1);
-                findAndPrint<false>(depth - depth1, sources, best.operand2);
+                findAndPrint<false>(best.depth1, sources, best.operand1);
+                findAndPrint<false>(depth - best.depth1, sources, best.operand2);
                 break;
         }
     }
