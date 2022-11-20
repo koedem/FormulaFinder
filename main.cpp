@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <cassert>
-#include "math.h"
+#include <cmath>
 #include "SimpleClock.h"
 #include "MergeFinder.h"
 #include "Utils.h"
@@ -38,7 +38,7 @@ void prune(std::vector<double> &original) {
     std::vector<double> pruned;
     for (double & i : original) {
         if (pruned.empty() || i != pruned.back()) {
-            if (isfinite(i)) {
+            if (std::isfinite(i)) {
                 pruned.emplace_back(i);
             }
         }
