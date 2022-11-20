@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <cassert>
 #include "SimpleClock.h"
 #include "Utils.h"
 
@@ -16,7 +17,6 @@ private:
         size_t depth1; // Remaining depth for operand1
     };
 
-public:
     /*template<bool ROOT>
     void find_best_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find, SimpleClock& clock,
                        double& highscore, double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t& larger_depth) {
@@ -67,7 +67,16 @@ public:
         }
     }
 
-    // TODO shouldn't we search for exact matches here almost always?
+    static void exact_depth_one_match(const std::vector<double>& source, double to_find) {
+        for (double x : source) {
+            if (x == to_find) {
+                std::cout << x << " ";
+                return;
+            }
+        }
+        assert(false);
+    }
+
     static void find_depth_one(const std::vector<double>& source, double to_find) {
         double high_score = std::abs(to_find), best_fit;
         for (double x : source) {
@@ -79,6 +88,8 @@ public:
         std::cout << best_fit << " ";
     }
 
+public:
+
 /**
  * TODO add square root resolution
  * @param root
@@ -89,7 +100,11 @@ public:
     template<bool ROOT>
     void findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, double to_find) {
         if (depth == 1) {
-            find_depth_one(sources[1], to_find);
+            if constexpr (ROOT) { // If this is a depth 1 search we might not get an exact match.
+                find_depth_one(sources[1], to_find);
+            } else {
+                exact_depth_one_match(sources[1], to_find);
+            }
             return;
         }
         SimpleClock clock2;
@@ -168,8 +183,8 @@ public:
             }
 
             if (to_find >= 0) { // we assume both factors are positive, negative * negative should rarely be optimal
-                size_t largeZero = Utils::approxBinSearch(large, 0);
-                size_t smallZero = Utils::approxBinSearch(small, 0);
+                size_t largeZero = Utils::approx_binary_search(large, 0);
+                size_t smallZero = Utils::approx_binary_search(small, 0);
 
                 for (size_t i = largeZero, j = small.size() - 1; i < large.size() && j >= smallZero && j <= small.size();) {
                     double x = large[i] * small[j];
