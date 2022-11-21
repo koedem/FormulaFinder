@@ -141,28 +141,8 @@ public:
         while (larger_depth * 2 >= depth) {
             const std::vector<double>& large = sources[larger_depth];
             const std::vector<double>& small = sources[depth - larger_depth];
-            if constexpr (ROOT) {
-                clock2.start();
-            }
-            for (size_t i = 0, j = small.size() - 1; i < large.size() && j <= small.size();) {
-                double x = large[i] + small[j];
-                if (std::abs(to_find - x) < best.absolute_difference) {
-                    best.absolute_difference = std::abs(to_find - x);
-                    best.operation = Utils::ADD;
-                    best.operand1 = large[i];
-                    best.operand2 = small[j];
-                    best.depth1 = larger_depth;
-                }
-                if (x > to_find) {
-                    j--;
-                } else {
-                    i++;
-                }
-            }
-            if constexpr (ROOT) {
-                std::cout << "Adding " << clock2.end() << std::endl;
-                clock2.start();
-            }
+            find_generic_sum<ROOT, Utils::ADD>(large, small, to_find, best, larger_depth, clock2);
+
             for (size_t i = 0, j = 0; i < large.size() && j < small.size();) {
                 double x = large[i] - small[j];
                 if (std::abs(to_find - x) < best.absolute_difference) {
