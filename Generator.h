@@ -92,5 +92,5 @@ private:
         original.swap(pruned);
     }
 
-    static SimpleClock clock;
+    inline static SimpleClock clock;
 };
