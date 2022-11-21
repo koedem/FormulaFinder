@@ -6,6 +6,7 @@
 #include <cassert>
 #include "SimpleClock.h"
 #include "Utils.h"
+#include "AddMerger.h"
 
 class MergeFinder {
 
@@ -17,20 +18,17 @@ private:
         size_t depth1; // Remaining depth for operand1
     };
 
-    /*template<bool ROOT>
-    void find_best_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find, SimpleClock& clock,
-                       double& highscore, double& operand1, double& operand2, std::string& best_op, size_t& depth1, const size_t& larger_depth) {
-        if constexpr (ROOT) {
-            clock.start();
-        }
+    static bool find_exact_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+                               FormulaData& best, const size_t first_depth, SimpleClock& clock) {
         for (size_t i = 0, j = small.size() - 1; i < large.size() && j <= small.size();) {
             double x = large[i] + small[j];
-            if (abs(to_find - x) < highscore) {
-                highscore = abs(to_find - x);
-                best_op = '+';
-                operand1 = large[i];
-                operand2 = small[j];
-                depth1 = larger_depth;
+            if (x == to_find) {
+                best.absolute_difference = 0;
+                best.operation = Utils::ADD;
+                best.operand1 = large[i];
+                best.operand2 = small[j];
+                best.depth1 = first_depth;
+                return true;
             }
             if (x > to_find) {
                 j--;
@@ -38,12 +36,35 @@ private:
                 i++;
             }
         }
+        return false;
+    }
+
+    template<bool ROOT, Utils::Op OP>
+    void find_generic_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+                       FormulaData& best, const size_t first_depth, SimpleClock& clock) {
         if constexpr (ROOT) {
-            std::cout << "Adding " << clock.end() << std::endl;
             clock.start();
         }
-
-    }*/
+        for (size_t i = starting_i<OP>(large.size()), j = starting_j<OP>(small.size()); condition<OP>(i, j, large.size(), small.size());) {
+            double x = Utils::apply_operator<OP>(large[i], small[j]);
+            if (std::abs(to_find - x) < best.absolute_difference) {
+                best.absolute_difference = std::abs(to_find - x);
+                best.operation = OP;
+                best.operand1 = large[i];
+                best.operand2 = small[j];
+                best.depth1 = first_depth;
+            }
+            if (x > to_find) {
+                update_big_x<OP>(i, j);
+            } else {
+                update_small_x<OP>(i, j);
+            }
+        }
+        if constexpr (ROOT) {
+            std::cout << op_strings[OP] << " " << clock.end() << std::endl;
+            clock.start();
+        }
+    }
 
     template<bool ROOT, Utils::Op OP>
     void brute_force_search(const std::vector<double>& first, const std::vector<double>& second, double to_find,
@@ -60,7 +81,6 @@ private:
                 }
             }
         }
-
         if constexpr (ROOT) {
             std::cout << "Slow " << op_strings[OP] << " " << clock2.end() << std::endl;
             clock2.start();
