@@ -4,6 +4,7 @@
 #include <cassert>
 #include <iostream>
 #include <cmath>
+#include <algorithm>
 #include "SimpleClock.h"
 
 class Generator {
@@ -13,9 +14,11 @@ public:
         std::vector<std::vector<double>> result;
         result.emplace_back(std::vector<double>()); // This one stays empty because we want the vector to be 1-indexed.
         result.emplace_back(std::vector<double>());
-        for (int i = 1; i <= 10; i++) {
+        for (int i = 1; i <= 8; i++) {
             result[1].emplace_back(i);
         }
+        result[1].emplace_back(M_PI);
+        result[1].emplace_back(M_E);
         return result;
     }
 

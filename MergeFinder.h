@@ -7,6 +7,8 @@
 #include "SimpleClock.h"
 #include "Utils.h"
 #include "AddMerger.h"
+#include "Sub1Merger.h"
+#include "Sub2Merger.h"
 
 class MergeFinder {
 
@@ -17,27 +19,6 @@ private:
         Utils::Op operation;
         size_t depth1; // Remaining depth for operand1
     };
-
-    static bool find_exact_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                               FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        for (size_t i = 0, j = small.size() - 1; i < large.size() && j <= small.size();) {
-            double x = large[i] + small[j];
-            if (x == to_find) {
-                best.absolute_difference = 0;
-                best.operation = Utils::ADD;
-                best.operand1 = large[i];
-                best.operand2 = small[j];
-                best.depth1 = first_depth;
-                return true;
-            }
-            if (x > to_find) {
-                j--;
-            } else {
-                i++;
-            }
-        }
-        return false;
-    }
 
     template<bool ROOT, Utils::Op OP>
     void find_generic_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find,
@@ -62,7 +43,6 @@ private:
         }
         if constexpr (ROOT) {
             std::cout << op_strings[OP] << " " << clock.end() << std::endl;
-            clock.start();
         }
     }
 
@@ -142,45 +122,8 @@ public:
             const std::vector<double>& large = sources[larger_depth];
             const std::vector<double>& small = sources[depth - larger_depth];
             find_generic_sum<ROOT, Utils::ADD>(large, small, to_find, best, larger_depth, clock2);
-
-            for (size_t i = 0, j = 0; i < large.size() && j < small.size();) {
-                double x = large[i] - small[j];
-                if (std::abs(to_find - x) < best.absolute_difference) {
-                    best.absolute_difference = std::abs(to_find - x);
-                    best.operation = Utils::SUB1;
-                    best.operand1 = large[i];
-                    best.operand2 = small[j];
-                    best.depth1 = larger_depth;
-                }
-                if (x > to_find) {
-                    j++;
-                } else {
-                    i++;
-                }
-            }
-            if constexpr (ROOT) {
-                std::cout << "Sub1 " << clock2.end() << std::endl;
-                clock2.start();
-            }
-            for (size_t i = 0, j = 0; i < large.size() && j < small.size();) {
-                double x = small[j] - large[i];
-                if (std::abs(to_find - x) < best.absolute_difference) {
-                    best.absolute_difference = std::abs(to_find - x);
-                    best.operation = Utils::SUB2;
-                    best.operand1 = large[i];
-                    best.operand2 = small[j];
-                    best.depth1 = larger_depth;
-                }
-                if (x > to_find) {
-                    i++;
-                } else {
-                    j++;
-                }
-            }
-            if constexpr (ROOT) {
-                std::cout << "Sub2 " << clock2.end() << std::endl;
-                clock2.start();
-            }
+            find_generic_sum<ROOT, Utils::SUB1>(large, small, to_find, best, larger_depth, clock2);
+            find_generic_sum<ROOT, Utils::SUB2>(large, small, to_find, best, larger_depth, clock2);
 
             if (to_find >= 0) { // we assume both factors are positive, negative * negative should rarely be optimal
                 size_t largeZero = Utils::approx_binary_search(large, 0);
