@@ -5,20 +5,29 @@
 #include <iostream>
 #include <cmath>
 #include <algorithm>
+#include <string>
+#include <utility>
 #include "SimpleClock.h"
 
 class Generator {
 
 public:
+    /**
+     * Single source of truth for the depth-1 atoms: each is a numeric value paired with the symbol printed for it.
+     * Adding constants (e.g. {std::sqrt(2.0), "sqrt2"}) only requires extending this list.
+     */
+    static const std::vector<std::pair<double, std::string>>& atoms() {
+        static const std::vector<std::pair<double, std::string>> values = build_atoms();
+        return values;
+    }
+
     static std::vector<std::vector<double>> initialize_values() {
         std::vector<std::vector<double>> result;
         result.emplace_back(std::vector<double>()); // This one stays empty because we want the vector to be 1-indexed.
         result.emplace_back(std::vector<double>());
-        for (int i = 1; i <= 8; i++) {
-            result[1].emplace_back(i);
+        for (const auto& [value, label] : atoms()) {
+            result[1].emplace_back(value);
         }
-        result[1].emplace_back(M_PI);
-        result[1].emplace_back(M_E);
         std::sort(result[1].begin(), result[1].end()); // All searches assume each depth's values are sorted ascending.
         return result;
     }
@@ -44,6 +53,16 @@ public:
     }
 
 private:
+    static std::vector<std::pair<double, std::string>> build_atoms() {
+        std::vector<std::pair<double, std::string>> atoms;
+        for (int i = 1; i <= 8; i++) {
+            atoms.emplace_back(static_cast<double>(i), std::to_string(i));
+        }
+        atoms.emplace_back(M_PI, "pi");
+        atoms.emplace_back(M_E, "e");
+        return atoms;
+    }
+
     /**
      * This function combines the values of the two inputs through arithmetic operations. These arithmetic operations
      * include sum, product, exponentiation and more.

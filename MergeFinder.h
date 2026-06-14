@@ -5,6 +5,8 @@
 #include <vector>
 #include <cassert>
 #include <algorithm>
+#include <string>
+#include <utility>
 #include "SimpleClock.h"
 #include "Utils.h"
 #include "AddMerger.h"
@@ -177,25 +179,28 @@ private:
         }
     }
 
-    static void exact_depth_one_match(const std::vector<double>& source, double to_find) {
-        for (double x : source) {
-            if (x == to_find) {
-                std::cout << x << " ";
+    // Reconstruction reaches a depth-1 operand whose value is exactly one of the atoms; print that atom's symbol.
+    void exact_depth_one_match(double to_find) const {
+        for (const auto& [value, label] : atoms) {
+            if (value == to_find) {
+                std::cout << label << " ";
                 return;
             }
         }
         assert(false);
     }
 
-    static void find_depth_one(const std::vector<double>& source, double to_find) {
-        double high_score = std::abs(to_find), best_fit;
-        for (double x : source) {
-            if (std::abs(to_find - x) < high_score) {
-                high_score = std::abs(to_find - x);
-                best_fit = x;
+    // Top-level depth-1 search: no exact match guaranteed, so print the symbol of the closest atom.
+    void find_depth_one(double to_find) const {
+        const std::string* best_label = nullptr;
+        double high_score = std::abs(to_find);
+        for (const auto& [value, label] : atoms) {
+            if (best_label == nullptr || std::abs(to_find - value) < high_score) {
+                high_score = std::abs(to_find - value);
+                best_label = &label;
             }
         }
-        std::cout << best_fit << " ";
+        std::cout << *best_label << " ";
     }
 
 public:
@@ -211,9 +216,9 @@ public:
     void findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, double to_find) {
         if (depth == 1) {
             if constexpr (ROOT) { // If this is a depth 1 search we might not get an exact match.
-                find_depth_one(sources[1], to_find);
+                find_depth_one(to_find);
             } else {
-                exact_depth_one_match(sources[1], to_find);
+                exact_depth_one_match(to_find);
             }
             return;
         }
@@ -267,11 +272,13 @@ public:
         }
     }
 
-    explicit MergeFinder(SimpleClock& clock1) : clock1(clock1) {
+    MergeFinder(SimpleClock& clock1, const std::vector<std::pair<double, std::string>>& atoms)
+        : clock1(clock1), atoms(atoms) {
     }
 
 private:
     SimpleClock& clock1;
+    const std::vector<std::pair<double, std::string>>& atoms; // depth-1 {value, symbol} pairs, for printing leaves.
 
     static constexpr std::string_view op_strings[] = {[Utils::ADD] = "+", [Utils::SUB1] = "-", [Utils::SUB2] = "-",
                                 [Utils::MUL] = "*", [Utils::DIV1] = "/", [Utils::DIV2] = "/", [Utils::POW1] = "pow1",
