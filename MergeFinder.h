@@ -9,9 +9,6 @@
 #include <utility>
 #include "SimpleClock.h"
 #include "Utils.h"
-#include "AddMerger.h"
-#include "Sub1Merger.h"
-#include "Sub2Merger.h"
 
 class MergeFinder {
 
@@ -25,30 +22,14 @@ private:
         size_t depth1; // Remaining depth for operand1
     };
 
-    template<bool ROOT, Utils::Op OP>
-    void find_generic_sum(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                       FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) {
-            clock.start();
-        }
-        for (size_t i = starting_i<OP>(large.size()), j = starting_j<OP>(small.size()); condition<OP>(i, j, large.size(), small.size());) {
-            double x = Utils::apply_operator<OP>(large[i], small[j]);
-            if (std::abs(to_find - x) < best.absolute_difference) {
-                best.absolute_difference = std::abs(to_find - x);
-                best.operation = OP;
-                best.operand1 = large[i];
-                best.operand2 = small[j];
-                best.depth1 = first_depth;
-            }
-            if (x > to_find) {
-                update_big_x<OP>(i, j);
-            } else {
-                update_small_x<OP>(i, j);
-            }
-        }
-        if constexpr (ROOT) {
-            std::cout << op_strings[OP] << " " << clock.end() << std::endl;
-        }
+    // ADD / SUB1 / SUB2 are strictly monotone in each operand with a fixed sign over the *entire* large x small
+    // rectangle (no sign-dependent sub-regions), so each reduces to a single full-block merge_region sweep.
+    template<bool ROOT, Utils::Op OP, int SA, int SB>
+    void merge_full(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
+        if constexpr (ROOT) { clock.start(); }
+        merge_region<OP, SA, SB>(large, small, 0, large.size(), 0, small.size(), to_find, best, first_depth);
+        if constexpr (ROOT) { std::cout << op_strings[OP] << " " << clock.end() << std::endl; }
     }
 
     static void update_best(double x, double a, double b, Utils::Op op, size_t first_depth,
@@ -298,9 +279,9 @@ public:
         while (larger_depth * 2 >= depth) {
             const std::vector<double>& large = sources[larger_depth];
             const std::vector<double>& small = sources[depth - larger_depth];
-            find_generic_sum<ROOT, Utils::ADD>(large, small, to_find, best, larger_depth, clock2);
-            find_generic_sum<ROOT, Utils::SUB1>(large, small, to_find, best, larger_depth, clock2);
-            find_generic_sum<ROOT, Utils::SUB2>(large, small, to_find, best, larger_depth, clock2);
+            merge_full<ROOT, Utils::ADD, +1, +1>(large, small, to_find, best, larger_depth, clock2);   // a+b
+            merge_full<ROOT, Utils::SUB1, +1, -1>(large, small, to_find, best, larger_depth, clock2);  // a-b
+            merge_full<ROOT, Utils::SUB2, -1, +1>(large, small, to_find, best, larger_depth, clock2);  // b-a
 
             merge_mul<ROOT>(large, small, to_find, best, larger_depth, clock2);
             merge_div1<ROOT>(large, small, to_find, best, larger_depth, clock2);

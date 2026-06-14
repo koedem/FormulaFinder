@@ -3,4 +3,4 @@ project(FormulaFinder)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(FormulaFinder main.cpp SimpleClock.h MergeFinder.h Utils.h Generator.h AddMerger.h OpMerger.h Sub1Merger.h Sub2Merger.h)
+add_executable(FormulaFinder main.cpp SimpleClock.h MergeFinder.h Utils.h Generator.h)
