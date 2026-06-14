@@ -19,6 +19,7 @@ public:
         }
         result[1].emplace_back(M_PI);
         result[1].emplace_back(M_E);
+        std::sort(result[1].begin(), result[1].end()); // All searches assume each depth's values are sorted ascending.
         return result;
     }
 
