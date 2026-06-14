@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <cmath>
 
 class Utils {
 
@@ -83,6 +84,24 @@ public:
     }
 
     enum Op { ADD = 0, SUB1 = 1, SUB2 = 2, MUL = 3, DIV1 = 4, DIV2 = 5, POW1 = 6, POW2 = 7, LOG1 = 8, LOG2 = 9 };
+
+    // Runtime counterpart of apply_operator, for evaluating a reconstructed formula tree whose operators are
+    // only known at run time. Mirrors apply_operator exactly so a rebuilt tree reproduces the searched value.
+    static double apply_runtime(Op op, double a, double b) {
+        switch (op) {
+            case ADD:  return a + b;
+            case SUB1: return a - b;
+            case SUB2: return b - a;
+            case MUL:  return a * b;
+            case DIV1: return a / b;
+            case DIV2: return b / a;
+            case POW1: return pow(a, b);
+            case POW2: return pow(b, a);
+            case LOG1: return log(a) / log(b);
+            case LOG2: return log(b) / log(a);
+        }
+        return 0.0; // unreachable
+    }
 
 private:
     Utils() = default;

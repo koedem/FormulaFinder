@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <utility>
+#include <memory>
 #include "SimpleClock.h"
 #include "Utils.h"
 
@@ -222,28 +223,105 @@ private:
         if constexpr (ROOT) { std::cout << "log2 " << clock.end() << std::endl; }
     }
 
-    // Reconstruction reaches a depth-1 operand whose value is exactly one of the atoms; print that atom's symbol.
-    void exact_depth_one_match(double to_find) const {
+    // A reconstructed formula. A leaf carries an atom's symbol; an internal node carries an operator and its two
+    // operands in canonical (operand1, operand2) order -- the same order FormulaData stores them, so value can be
+    // recomputed with Utils::apply_runtime. Display reordering (e.g. b - a for SUB2) lives entirely in render().
+    struct Formula {
+        std::string label;                       // set iff this is a leaf
+        Utils::Op op{};                          // operator, for internal nodes
+        double value{};                          // value this subtree evaluates to
+        std::unique_ptr<Formula> first, second;  // operand1, operand2 subtrees
+        bool is_leaf() const { return first == nullptr; }
+    };
+
+    // Reconstruction reaches a depth-1 operand whose value is exactly one of the atoms; return that atom as a leaf.
+    Formula exact_depth_one_match(double to_find) const {
         for (const auto& [value, label] : atoms) {
             if (value == to_find) {
-                std::cout << label << " ";
-                return;
+                Formula leaf; leaf.label = label; leaf.value = value;
+                return leaf;
             }
         }
         assert(false);
+        return {};
     }
 
-    // Top-level depth-1 search: no exact match guaranteed, so print the symbol of the closest atom.
-    void find_depth_one(double to_find) const {
-        const std::string* best_label = nullptr;
+    // Top-level depth-1 search: no exact match guaranteed, so return the closest atom as a leaf.
+    Formula find_depth_one(double to_find) const {
+        const std::pair<double, std::string>* best = nullptr;
         double high_score = std::abs(to_find);
-        for (const auto& [value, label] : atoms) {
-            if (best_label == nullptr || std::abs(to_find - value) < high_score) {
-                high_score = std::abs(to_find - value);
-                best_label = &label;
+        for (const auto& atom : atoms) {
+            if (best == nullptr || std::abs(to_find - atom.first) < high_score) {
+                high_score = std::abs(to_find - atom.first);
+                best = &atom;
             }
         }
-        std::cout << *best_label << " ";
+        Formula leaf; leaf.label = best->second; leaf.value = best->first;
+        return leaf;
+    }
+
+    // Operator binding strength for minimal parenthesization (higher binds tighter). Leaves and the log_b(a) form
+    // are self-delimiting, so they rank as atomic and never need parentheses around them.
+    static int precedence(const Formula& f) {
+        if (f.is_leaf()) { return 100; }
+        switch (f.op) {
+            case Utils::ADD: case Utils::SUB1: case Utils::SUB2: return 1;
+            case Utils::MUL: case Utils::DIV1: case Utils::DIV2: return 2;
+            case Utils::POW1: case Utils::POW2: return 3;
+            default: return 100; // LOG1 / LOG2
+        }
+    }
+
+    static void render_child(const Formula& child, int parent_prec, bool is_left, bool parent_right_assoc,
+                             std::string& out) {
+        const int cp = precedence(child);
+        // A child binding looser than its parent needs parentheses; at equal precedence, the side that would
+        // re-associate the wrong way does (right operand of a left-associative op, left operand of a right one).
+        const bool paren = cp < parent_prec || (cp == parent_prec && (parent_right_assoc ? is_left : !is_left));
+        if (paren) { out += '('; }
+        render(child, out);
+        if (paren) { out += ')'; }
+    }
+
+    // log_b(a): base b on the subscript, argument a in parentheses. The base is wrapped when it is itself compound.
+    static void render_log(const Formula& base, const Formula& arg, std::string& out) {
+        out += "log_";
+        const bool wrap = !base.is_leaf();
+        if (wrap) { out += '('; }
+        render(base, out);
+        if (wrap) { out += ')'; }
+        out += '(';
+        render(arg, out);
+        out += ')';
+    }
+
+    // Render a formula tree as parenthesized infix into out.
+    static void render(const Formula& f, std::string& out) {
+        if (f.is_leaf()) { out += f.label; return; }
+        if (f.op == Utils::LOG1) { render_log(*f.second, *f.first, out); return; } // log_b(a): base=operand2
+        if (f.op == Utils::LOG2) { render_log(*f.first, *f.second, out); return; } // log_a(b): base=operand1
+
+        const Formula* L; const Formula* R; char sym; bool right_assoc = false;
+        switch (f.op) {
+            case Utils::ADD:  L = f.first.get();  R = f.second.get(); sym = '+'; break;
+            case Utils::SUB1: L = f.first.get();  R = f.second.get(); sym = '-'; break;
+            case Utils::SUB2: L = f.second.get(); R = f.first.get();  sym = '-'; break; // b - a
+            case Utils::MUL:  L = f.first.get();  R = f.second.get(); sym = '*'; break;
+            case Utils::DIV1: L = f.first.get();  R = f.second.get(); sym = '/'; break;
+            case Utils::DIV2: L = f.second.get(); R = f.first.get();  sym = '/'; break; // b / a
+            case Utils::POW1: L = f.first.get();  R = f.second.get(); sym = '^'; right_assoc = true; break;
+            case Utils::POW2: L = f.second.get(); R = f.first.get();  sym = '^'; right_assoc = true; break; // b ^ a
+            default: return; // unreachable: logs handled above
+        }
+        const int p = precedence(f);
+        render_child(*L, p, true, right_assoc, out);
+        out += ' '; out += sym; out += ' ';
+        render_child(*R, p, false, right_assoc, out);
+    }
+
+    // True when the rebuilt subtree reproduces the value the search reported for it (relative tolerance for scale).
+    static bool reproduces(double got, double want) {
+        return std::abs(got - want) <= 1e-9 * std::max(1.0, std::abs(want));
     }
 
 public:
@@ -256,14 +334,10 @@ public:
  * @param to_find
  */
     template<bool ROOT>
-    void findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, double to_find) {
+    Formula findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, double to_find) {
         if (depth == 1) {
-            if constexpr (ROOT) { // If this is a depth 1 search we might not get an exact match.
-                find_depth_one(to_find);
-            } else {
-                exact_depth_one_match(to_find);
-            }
-            return;
+            // A depth-1 root search might not land on an exact atom; reconstruction always does.
+            return ROOT ? find_depth_one(to_find) : exact_depth_one_match(to_find);
         }
         SimpleClock clock2;
         if constexpr (ROOT) {
@@ -293,24 +367,27 @@ public:
 
             larger_depth--;
         }
-        if constexpr (ROOT) {
-            std::cout << clock1.end() << " seconds, depth: " << depth << ", high score: " << best.absolute_difference << "; x =  ";
-        }
-        std::cout << op_strings[best.operation] << " ";
+        // Timing is measured over the search only; reconstruction below re-searches the (cheap, shallow) operands.
+        double seconds = 0;
+        if constexpr (ROOT) { seconds = clock1.end(); }
 
-        switch (best.operation) {
-            case Utils::SUB2:
-            case Utils::DIV2:
-            case Utils::POW2:
-            case Utils::LOG2:
-                findAndPrint<false>(depth - best.depth1, sources, best.operand2);
-                findAndPrint<false>(best.depth1, sources, best.operand1);
-                break;
-            default:
-                findAndPrint<false>(best.depth1, sources, best.operand1);
-                findAndPrint<false>(depth - best.depth1, sources, best.operand2);
-                break;
+        Formula node;
+        node.op = best.operation;
+        node.first  = std::make_unique<Formula>(findAndPrint<false>(best.depth1, sources, best.operand1));
+        node.second = std::make_unique<Formula>(findAndPrint<false>(depth - best.depth1, sources, best.operand2));
+        node.value  = Utils::apply_runtime(best.operation, node.first->value, node.second->value);
+        // The rebuilt operands must reproduce the doubles the search picked, or the printed formula would lie.
+        assert(reproduces(node.first->value, best.operand1) && reproduces(node.second->value, best.operand2));
+
+        if constexpr (ROOT) {
+            assert(reproduces(std::abs(to_find - node.value), best.absolute_difference));
+            std::cout << seconds << " seconds, depth: " << depth << ", high score: "
+                      << best.absolute_difference << "; x = ";
+            std::string formula;
+            render(node, formula);
+            std::cout << formula;
         }
+        return node;
     }
 
     MergeFinder(SimpleClock& clock1, const std::vector<std::pair<double, std::string>>& atoms)
