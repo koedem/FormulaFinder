@@ -232,6 +232,27 @@ private:
         }
     }
 
+    // Unary sqrt over a single sorted source: sqrt costs one depth, so this considers sqrt(v) for v in the
+    // depth-(d-1) values. sqrt is monotone increasing on v >= 0, so the closest sqrt(v) to to_find sits at the v
+    // closest to to_find^2 -- one binary search plus its two neighbours, rather than a full sweep.
+    template<bool ROOT>
+    void merge_sqrt(const std::vector<double>& source, double to_find, FormulaData& best, const size_t first_depth) {
+        OpTimer t("sqrt", ROOT);
+        const size_t pos = static_cast<size_t>(std::lower_bound(source.begin(), source.end(), 0.0) - source.begin());
+        if (pos >= source.size()) { return; } // no non-negative radicands
+        auto consider = [&](size_t idx) {
+            update_best(std::sqrt(source[idx]), source[idx], 0.0, Utils::SQRT, first_depth, to_find, best);
+        };
+        if (to_find <= 0.0) { // every sqrt(v) >= 0 >= to_find, so the smallest radicand is closest
+            consider(pos);
+            return;
+        }
+        const double target = to_find * to_find;
+        const size_t idx = static_cast<size_t>(std::lower_bound(source.begin() + pos, source.end(), target) - source.begin());
+        if (idx < source.size()) { consider(idx); }      // smallest v >= to_find^2
+        if (idx > pos)          { consider(idx - 1); }   // largest v < to_find^2
+    }
+
     // A reconstructed formula. A leaf carries an atom's symbol; an internal node carries an operator and its two
     // operands in canonical (operand1, operand2) order -- the same order FormulaData stores them, so value can be
     // recomputed with Utils::apply_runtime. Display reordering (e.g. b - a for SUB2) lives entirely in render().
@@ -240,7 +261,8 @@ private:
         Utils::Op op{};                          // operator, for internal nodes
         double value{};                          // value this subtree evaluates to
         std::unique_ptr<Formula> first, second;  // operand1, operand2 subtrees
-        bool is_leaf() const { return first == nullptr; }
+        bool is_leaf() const { return first == nullptr; }                    // no children
+        bool is_unary() const { return first != nullptr && second == nullptr; } // one child (e.g. sqrt)
     };
 
     // Reconstruction reaches a depth-1 operand whose value is exactly one of the atoms; return that atom as a leaf.
@@ -277,7 +299,7 @@ private:
             case Utils::ADD: case Utils::SUB1: case Utils::SUB2: return 1;
             case Utils::MUL: case Utils::DIV1: case Utils::DIV2: return 2;
             case Utils::POW1: case Utils::POW2: return 3;
-            default: return 100; // LOG1 / LOG2
+            default: return 100; // LOG1 / LOG2 / SQRT -- self-delimiting, never parenthesized
         }
     }
 
@@ -307,6 +329,7 @@ private:
     // Render a formula tree as parenthesized infix into out.
     static void render(const Formula& f, std::string& out) {
         if (f.is_leaf()) { out += f.label; return; }
+        if (f.is_unary()) { out += "sqrt("; render(*f.first, out); out += ')'; return; } // only unary op is SQRT
         if (f.op == Utils::LOG1) { render_log(*f.second, *f.first, out); return; } // log_b(a): base=operand2
         if (f.op == Utils::LOG2) { render_log(*f.first, *f.second, out); return; } // log_a(b): base=operand1
 
@@ -336,11 +359,11 @@ private:
 public:
 
 /**
- * TODO add square root resolution
- * @param root
- * @param depth
- * @param sources
- * @param to_find
+ * Searches for the closest formula of the given depth to to_find, then (at ROOT) reconstructs and prints it.
+ * Considers every binary operator over the sorted value tiers plus the unary sqrt of the depth-(d-1) tier.
+ * @param depth target expression depth.
+ * @param sources value tiers, sources[k] holding every value reachable at depth k.
+ * @param to_find the value to approximate.
  */
     template<bool ROOT>
     Formula findAndPrint(size_t depth, std::vector<std::vector<double>> &sources, double to_find) {
@@ -376,17 +399,28 @@ public:
 
             larger_depth--;
         }
+        // sqrt is unary and costs exactly one depth, so it draws on the depth-(d-1) tier -- but only when that tier
+        // exists. For the jumped-to high depths (depth - 1 >= sources.size()) it was never generated, so skip it,
+        // matching the fact that no sqrt term was injected into those depths either.
+        if (depth - 1 < sources.size()) {
+            merge_sqrt<ROOT>(sources[depth - 1], to_find, best, depth - 1);
+        }
         // Timing is measured over the search only; reconstruction below re-searches the (cheap, shallow) operands.
         double seconds = 0;
         if constexpr (ROOT) { seconds = depth_clock.end(); }
 
         Formula node;
         node.op = best.operation;
-        node.first  = std::make_unique<Formula>(findAndPrint<false>(best.depth1, sources, best.operand1));
-        node.second = std::make_unique<Formula>(findAndPrint<false>(depth - best.depth1, sources, best.operand2));
-        node.value  = Utils::apply_runtime(best.operation, node.first->value, node.second->value);
-        // The rebuilt operands must reproduce the doubles the search picked, or the printed formula would lie.
-        assert(reproduces(node.first->value, best.operand1) && reproduces(node.second->value, best.operand2));
+        node.first = std::make_unique<Formula>(findAndPrint<false>(best.depth1, sources, best.operand1));
+        if (best.operation == Utils::SQRT) { // unary: no second operand, value is sqrt of the one child
+            node.value = Utils::apply_runtime(Utils::SQRT, node.first->value, 0.0);
+            assert(reproduces(node.first->value, best.operand1));
+        } else {
+            node.second = std::make_unique<Formula>(findAndPrint<false>(depth - best.depth1, sources, best.operand2));
+            node.value  = Utils::apply_runtime(best.operation, node.first->value, node.second->value);
+            // The rebuilt operands must reproduce the doubles the search picked, or the printed formula would lie.
+            assert(reproduces(node.first->value, best.operand1) && reproduces(node.second->value, best.operand2));
+        }
 
         if constexpr (ROOT) {
             assert(reproduces(std::abs(to_find - node.value), best.absolute_difference));
@@ -408,5 +442,6 @@ private:
 
     static constexpr std::string_view op_strings[] = {[Utils::ADD] = "+", [Utils::SUB1] = "-", [Utils::SUB2] = "-",
                                 [Utils::MUL] = "*", [Utils::DIV1] = "/", [Utils::DIV2] = "/", [Utils::POW1] = "pow1",
-                                [Utils::POW2] = "pow2", [Utils::LOG1] = "log1", [Utils::LOG2] = "log2" };
+                                [Utils::POW2] = "pow2", [Utils::LOG1] = "log1", [Utils::LOG2] = "log2",
+                                [Utils::SQRT] = "sqrt" };
 };

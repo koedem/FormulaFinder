@@ -84,7 +84,9 @@ public:
         }
     }
 
-    enum Op { ADD = 0, SUB1 = 1, SUB2 = 2, MUL = 3, DIV1 = 4, DIV2 = 5, POW1 = 6, POW2 = 7, LOG1 = 8, LOG2 = 9 };
+    // SQRT is the lone unary operator: it uses only the first operand, so its second operand is meaningless.
+    enum Op { ADD = 0, SUB1 = 1, SUB2 = 2, MUL = 3, DIV1 = 4, DIV2 = 5, POW1 = 6, POW2 = 7, LOG1 = 8, LOG2 = 9,
+              SQRT = 10 };
 
     // Runtime counterpart of apply_operator, for evaluating a reconstructed formula tree whose operators are
     // only known at run time. Mirrors apply_operator exactly so a rebuilt tree reproduces the searched value.
@@ -100,6 +102,7 @@ public:
             case POW2: return pow(b, a);
             case LOG1: return log(a) / log(b);
             case LOG2: return log(b) / log(a);
+            case SQRT: return sqrt(a); // unary: b is ignored
         }
         return 0.0; // unreachable
     }

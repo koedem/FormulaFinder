@@ -36,22 +36,19 @@ public:
     static void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t depth) {
         assert(values_per_depth.size() == depth);
         values_per_depth.emplace_back(std::vector<double>());
+        std::vector<double>& result = values_per_depth[depth];
+        SimpleClock clock;
         size_t previous_fill = 0;
         size_t large_half = depth - 1;
-        SimpleClock clock;
         while (large_half * 2 >= depth) { // Otherwise it's not the larger half.
-            generator(values_per_depth[large_half], values_per_depth[depth - large_half], values_per_depth[depth]);
-            clock.start();
-            std::sort(values_per_depth[depth].begin() + previous_fill, values_per_depth[depth].end()); // Don't need to sort what is already sorted.
-            if (previous_fill != 0) { // But in that case we need to merge the two sorted halves.
-                std::inplace_merge(values_per_depth[depth].begin(), values_per_depth[depth].begin() + previous_fill,
-                                   values_per_depth[depth].end());
-            }
-            LOG_AT(LogLevel::INFO) << clock.end() << " seconds used for sorting." << std::endl;
-            prune_duplicates(values_per_depth[depth]);
-            previous_fill = values_per_depth[depth].size();
+            generator(values_per_depth[large_half], values_per_depth[depth - large_half], result);
+            integrate_chunk(result, previous_fill, clock);
+            previous_fill = result.size();
             large_half--;
         }
+        // sqrt is unary and costs exactly one depth: the square roots of the depth-(d-1) values belong at depth d.
+        generate_roots(values_per_depth[depth - 1], result);
+        integrate_chunk(result, previous_fill, clock);
     }
 
 private:
@@ -63,6 +60,38 @@ private:
         atoms.emplace_back(M_PI, "pi");
         atoms.emplace_back(M_E, "e");
         return atoms;
+    }
+
+    /**
+     * Sorts the freshly appended tail [previous_fill, end) of result, merges it into the already-sorted head, and
+     * prunes duplicates and non-finite values. previous_fill is result's size before the latest chunk was appended.
+     */
+    static void integrate_chunk(std::vector<double>& result, size_t previous_fill, SimpleClock& clock) {
+        clock.start();
+        std::sort(result.begin() + previous_fill, result.end()); // Don't need to sort what is already sorted.
+        if (previous_fill != 0) { // For the first chunk there is nothing in front to merge with.
+            std::inplace_merge(result.begin(), result.begin() + previous_fill, result.end());
+        }
+        LOG_AT(LogLevel::INFO) << clock.end() << " seconds used for sorting." << std::endl;
+        prune_duplicates(result);
+    }
+
+    /**
+     * Appends sqrt(v) for every non-negative v in source. Negative radicands would yield NaN (pruned anyway), so they
+     * are skipped up front.
+     * @param source values from the depth one below the target depth.
+     * @param result the target depth's value vector, appended to in place.
+     */
+    static void generate_roots(const std::vector<double>& source, std::vector<double>& result) {
+        LOG_AT(LogLevel::INFO) << "Start root generation." << std::endl;
+        SimpleClock clock;
+        clock.start();
+        for (double v : source) {
+            if (v >= 0) {
+                result.emplace_back(sqrt(v));
+            }
+        }
+        LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end root generation." << std::endl;
     }
 
     /**
@@ -92,8 +121,7 @@ private:
                 }
             }
             if (a > 0) {
-                result.emplace_back(sqrt(a));
-                result.emplace_back(log(a));
+                result.emplace_back(log(a)); // sqrt is generated separately as a unary pass; natural log stays here.
             }
         }
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end generation." << std::endl;
