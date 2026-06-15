@@ -348,8 +348,9 @@ public:
             // A depth-1 root search might not land on an exact atom; reconstruction always does.
             return ROOT ? find_depth_one(to_find) : exact_depth_one_match(to_find);
         }
+        SimpleClock depth_clock; // Times this depth's search; only read for the top-level (ROOT) call.
         if constexpr (ROOT) {
-            clock1.start();
+            depth_clock.start();
         }
         FormulaData best{};
         best.absolute_difference = std::abs(to_find) + 10;
@@ -377,7 +378,7 @@ public:
         }
         // Timing is measured over the search only; reconstruction below re-searches the (cheap, shallow) operands.
         double seconds = 0;
-        if constexpr (ROOT) { seconds = clock1.end(); }
+        if constexpr (ROOT) { seconds = depth_clock.end(); }
 
         Formula node;
         node.op = best.operation;
@@ -398,12 +399,11 @@ public:
         return node;
     }
 
-    MergeFinder(SimpleClock& clock1, const std::vector<std::pair<double, std::string>>& atoms)
-        : clock1(clock1), atoms(atoms) {
+    explicit MergeFinder(const std::vector<std::pair<double, std::string>>& atoms)
+        : atoms(atoms) {
     }
 
 private:
-    SimpleClock& clock1;
     const std::vector<std::pair<double, std::string>>& atoms; // depth-1 {value, symbol} pairs, for printing leaves.
 
     static constexpr std::string_view op_strings[] = {[Utils::ADD] = "+", [Utils::SUB1] = "-", [Utils::SUB2] = "-",
