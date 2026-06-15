@@ -6,10 +6,12 @@
 #include <cassert>
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <memory>
 #include "SimpleClock.h"
 #include "Utils.h"
+#include "Log.h"
 
 class MergeFinder {
 
@@ -23,14 +25,28 @@ private:
         size_t depth1; // Remaining depth for operand1
     };
 
+    // Times one merge operation and prints "<name> <seconds>" on scope exit. Active only for the top-level (ROOT)
+    // search and only at DEBUG verbosity, so reconstruction's re-searches (root = false) stay silent and a clock is
+    // never even started when the breakdown would not be shown.
+    struct OpTimer {
+        std::string_view name;
+        SimpleClock clock;
+        bool active;
+        OpTimer(std::string_view name, bool root) : name(name), active(root && Log::enabled(LogLevel::DEBUG)) {
+            if (active) { clock.start(); }
+        }
+        ~OpTimer() {
+            if (active) { std::cout << name << " " << clock.end() << '\n'; }
+        }
+    };
+
     // ADD / SUB1 / SUB2 are strictly monotone in each operand with a fixed sign over the *entire* large x small
     // rectangle (no sign-dependent sub-regions), so each reduces to a single full-block merge_region sweep.
     template<bool ROOT, Utils::Op OP, int SA, int SB>
     void merge_full(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t(op_strings[OP], ROOT);
         merge_region<OP, SA, SB>(large, small, 0, large.size(), 0, small.size(), to_find, best, first_depth);
-        if constexpr (ROOT) { std::cout << op_strings[OP] << " " << clock.end() << std::endl; }
     }
 
     static void update_best(double x, double a, double b, Utils::Op op, size_t first_depth,
@@ -102,8 +118,8 @@ private:
 
     template<bool ROOT>
     void merge_mul(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                   FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                   FormulaData& best, const size_t first_depth) {
+        OpTimer t("Mul", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto l = sign_split(large), s = sign_split(small);
         merge_region<Utils::MUL, +1, +1>(large, small, l.pos, N, s.pos, M, to_find, best, first_depth); // a>0,b>0
@@ -112,13 +128,12 @@ private:
         merge_region<Utils::MUL, -1, -1>(large, small, 0, l.neg, 0, s.neg, to_find, best, first_depth); // a<0,b<0
         if (l.neg < l.pos) { update_best(0.0, large[l.neg], small.front(), Utils::MUL, first_depth, to_find, best); }
         if (s.neg < s.pos) { update_best(0.0, large.front(), small[s.neg], Utils::MUL, first_depth, to_find, best); }
-        if constexpr (ROOT) { std::cout << "Mul " << clock.end() << std::endl; }
     }
 
     template<bool ROOT>
     void merge_div1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("Div1", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto l = sign_split(large), s = sign_split(small); // a / b, the b = 0 column is undefined and skipped.
         merge_region<Utils::DIV1, +1, -1>(large, small, l.pos, N, s.pos, M, to_find, best, first_depth); // a>0,b>0
@@ -129,13 +144,12 @@ private:
             if (s.pos < M) { update_best(0.0, large[l.neg], small[s.pos], Utils::DIV1, first_depth, to_find, best); }
             else if (s.neg > 0) { update_best(0.0, large[l.neg], small[s.neg - 1], Utils::DIV1, first_depth, to_find, best); }
         }
-        if constexpr (ROOT) { std::cout << "Div1 " << clock.end() << std::endl; }
     }
 
     template<bool ROOT>
     void merge_div2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("Div2", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto l = sign_split(large), s = sign_split(small); // b / a, the a = 0 column is undefined and skipped.
         merge_region<Utils::DIV2, -1, +1>(large, small, l.pos, N, s.pos, M, to_find, best, first_depth); // a>0,b>0
@@ -146,15 +160,14 @@ private:
             if (l.pos < N) { update_best(0.0, large[l.pos], small[s.neg], Utils::DIV2, first_depth, to_find, best); }
             else if (l.neg > 0) { update_best(0.0, large[l.neg - 1], small[s.neg], Utils::DIV2, first_depth, to_find, best); }
         }
-        if constexpr (ROOT) { std::cout << "Div2 " << clock.end() << std::endl; }
     }
 
     // pow(a, b): base a = large (split at 1, must be > 0), exponent b = small (split at 0).
     // d/da = b*a^(b-1) so SA = sign(b); d/db = a^b*ln(a) so SB = sign(a - 1).
     template<bool ROOT>
     void merge_pow1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("pow1", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto a = pos_split(large);
         const auto b = sign_split(small);
@@ -164,15 +177,14 @@ private:
         merge_region<Utils::POW1, -1, -1>(large, small, a.pos, a.oneLo, 0, b.neg, to_find, best, first_depth); // 0<a<1,b<0
         if (a.oneLo < a.oneHi) { update_best(1.0, large[a.oneLo], small.front(), Utils::POW1, first_depth, to_find, best); } // 1^b = 1
         if (b.neg < b.pos && a.pos < N) { update_best(1.0, large[a.pos], small[b.neg], Utils::POW1, first_depth, to_find, best); } // a^0 = 1
-        if constexpr (ROOT) { std::cout << "pow1 " << clock.end() << std::endl; }
     }
 
     // pow(b, a): base b = small (split at 1, must be > 0), exponent a = large (split at 0).
     // d/da = b^a*ln(b) so SA = sign(b - 1); d/db = a*b^(a-1) so SB = sign(a).
     template<bool ROOT>
     void merge_pow2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("pow2", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto a = sign_split(large);
         const auto b = pos_split(small);
@@ -182,15 +194,14 @@ private:
         merge_region<Utils::POW2, -1, -1>(large, small, 0, a.neg, b.pos, b.oneLo, to_find, best, first_depth); // 0<b<1,a<0
         if (b.oneLo < b.oneHi) { update_best(1.0, large.front(), small[b.oneLo], Utils::POW2, first_depth, to_find, best); } // 1^a = 1
         if (a.neg < a.pos && b.pos < M) { update_best(1.0, large[a.neg], small[b.pos], Utils::POW2, first_depth, to_find, best); } // b^0 = 1
-        if constexpr (ROOT) { std::cout << "pow2 " << clock.end() << std::endl; }
     }
 
     // log(a)/log(b) = log_b(a): a = large, b = small, both split at 1 and required > 0 (b != 1).
     // SA = sign(b - 1); SB = -sign(a - 1).
     template<bool ROOT>
     void merge_log1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("log1", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto a = pos_split(large), b = pos_split(small);
         merge_region<Utils::LOG1, +1, -1>(large, small, a.oneHi, N, b.oneHi, M, to_find, best, first_depth); // a>1,b>1
@@ -201,15 +212,14 @@ private:
             if (b.oneHi < M) { update_best(0.0, large[a.oneLo], small[b.oneHi], Utils::LOG1, first_depth, to_find, best); }
             else if (b.pos < b.oneLo) { update_best(0.0, large[a.oneLo], small[b.pos], Utils::LOG1, first_depth, to_find, best); }
         }
-        if constexpr (ROOT) { std::cout << "log1 " << clock.end() << std::endl; }
     }
 
     // log(b)/log(a) = log_a(b): a = large, b = small, both split at 1 and required > 0 (a != 1).
     // SA = -sign(b - 1); SB = sign(a - 1).
     template<bool ROOT>
     void merge_log2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
-                    FormulaData& best, const size_t first_depth, SimpleClock& clock) {
-        if constexpr (ROOT) { clock.start(); }
+                    FormulaData& best, const size_t first_depth) {
+        OpTimer t("log2", ROOT);
         const size_t N = large.size(), M = small.size();
         const auto a = pos_split(large), b = pos_split(small);
         merge_region<Utils::LOG2, -1, +1>(large, small, a.oneHi, N, b.oneHi, M, to_find, best, first_depth); // a>1,b>1
@@ -220,7 +230,6 @@ private:
             if (a.oneHi < N) { update_best(0.0, large[a.oneHi], small[b.oneLo], Utils::LOG2, first_depth, to_find, best); }
             else if (a.pos < a.oneLo) { update_best(0.0, large[a.pos], small[b.oneLo], Utils::LOG2, first_depth, to_find, best); }
         }
-        if constexpr (ROOT) { std::cout << "log2 " << clock.end() << std::endl; }
     }
 
     // A reconstructed formula. A leaf carries an atom's symbol; an internal node carries an operator and its two
@@ -339,7 +348,6 @@ public:
             // A depth-1 root search might not land on an exact atom; reconstruction always does.
             return ROOT ? find_depth_one(to_find) : exact_depth_one_match(to_find);
         }
-        SimpleClock clock2;
         if constexpr (ROOT) {
             clock1.start();
         }
@@ -347,23 +355,23 @@ public:
         best.absolute_difference = std::abs(to_find) + 10;
         size_t larger_depth = depth - 1;
         if (larger_depth >= sources.size()) {
-            std::cout << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
+            LOG_AT(LogLevel::INFO) << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
             larger_depth = sources.size() - 1;
         }
         while (larger_depth * 2 >= depth) {
             const std::vector<double>& large = sources[larger_depth];
             const std::vector<double>& small = sources[depth - larger_depth];
-            merge_full<ROOT, Utils::ADD, +1, +1>(large, small, to_find, best, larger_depth, clock2);   // a+b
-            merge_full<ROOT, Utils::SUB1, +1, -1>(large, small, to_find, best, larger_depth, clock2);  // a-b
-            merge_full<ROOT, Utils::SUB2, -1, +1>(large, small, to_find, best, larger_depth, clock2);  // b-a
+            merge_full<ROOT, Utils::ADD, +1, +1>(large, small, to_find, best, larger_depth);   // a+b
+            merge_full<ROOT, Utils::SUB1, +1, -1>(large, small, to_find, best, larger_depth);  // a-b
+            merge_full<ROOT, Utils::SUB2, -1, +1>(large, small, to_find, best, larger_depth);  // b-a
 
-            merge_mul<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_div1<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_div2<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_pow1<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_pow2<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_log1<ROOT>(large, small, to_find, best, larger_depth, clock2);
-            merge_log2<ROOT>(large, small, to_find, best, larger_depth, clock2);
+            merge_mul<ROOT>(large, small, to_find, best, larger_depth);
+            merge_div1<ROOT>(large, small, to_find, best, larger_depth);
+            merge_div2<ROOT>(large, small, to_find, best, larger_depth);
+            merge_pow1<ROOT>(large, small, to_find, best, larger_depth);
+            merge_pow2<ROOT>(large, small, to_find, best, larger_depth);
+            merge_log1<ROOT>(large, small, to_find, best, larger_depth);
+            merge_log2<ROOT>(large, small, to_find, best, larger_depth);
 
             larger_depth--;
         }
@@ -381,11 +389,11 @@ public:
 
         if constexpr (ROOT) {
             assert(reproduces(std::abs(to_find - node.value), best.absolute_difference));
-            std::cout << seconds << " seconds, depth: " << depth << ", high score: "
-                      << best.absolute_difference << "; x = ";
+            LOG_AT(LogLevel::INFO) << "depth " << depth << " searched in " << seconds << " seconds" << std::endl;
             std::string formula;
             render(node, formula);
-            std::cout << formula;
+            LOG_AT(LogLevel::RESULT) << "depth " << depth << ": high score " << best.absolute_difference
+                                     << "; x = " << formula << std::endl;
         }
         return node;
     }

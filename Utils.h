@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cmath>
+#include "Log.h"
 
 class Utils {
 
@@ -55,7 +56,7 @@ public:
                 }
             }
         }
-        std::cout << "There are " << count << " matched negative numbers, " << notEqual << " are not found among the positives." << std::endl;
+        LOG_AT(LogLevel::INFO) << "There are " << count << " matched negative numbers, " << notEqual << " are not found among the positives." << std::endl;
     }
 
     template<size_t OP>

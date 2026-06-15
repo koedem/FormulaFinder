@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 #include "SimpleClock.h"
+#include "Log.h"
 
 class Generator {
 
@@ -45,7 +46,7 @@ public:
                 std::inplace_merge(values_per_depth[depth].begin(), values_per_depth[depth].begin() + previous_fill,
                                    values_per_depth[depth].end());
             }
-            std::cout << clock.end() << " seconds used for sorting." << std::endl;
+            LOG_AT(LogLevel::INFO) << clock.end() << " seconds used for sorting." << std::endl;
             prune_duplicates(values_per_depth[depth]);
             previous_fill = values_per_depth[depth].size();
             large_half--;
@@ -71,7 +72,7 @@ private:
      * @param result all results for OP(x, y) for x in source1, y in source2.
      */
     static void generator(const std::vector<double> &source1, const std::vector<double> &source2, std::vector<double> &result) {
-        std::cout << "Start generation." << std::endl;
+        LOG_AT(LogLevel::INFO) << "Start generation." << std::endl;
         clock.start();
         for (double a : source1) {
             for (double b : source2) {
@@ -93,7 +94,7 @@ private:
                 result.emplace_back(log(a));
             }
         }
-        std::cout << clock.end() << " seconds, end generation." << std::endl;
+        LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end generation." << std::endl;
     }
 
     /**
@@ -102,7 +103,7 @@ private:
      */
     static void prune_duplicates(std::vector<double> &original) {
         clock.start();
-        std::cout << "Start pruning." << std::endl;
+        LOG_AT(LogLevel::INFO) << "Start pruning." << std::endl;
         std::vector<double> pruned;
         for (double & i : original) {
             if (pruned.empty() || i != pruned.back()) {
@@ -111,7 +112,7 @@ private:
                 }
             }
         }
-        std::cout << clock.end() << " seconds, pruned " << original.size() << " to " << pruned.size() << std::endl;
+        LOG_AT(LogLevel::INFO) << clock.end() << " seconds, pruned " << original.size() << " to " << pruned.size() << std::endl;
         original.swap(pruned);
     }
 
