@@ -22,6 +22,16 @@ public:
         return values;
     }
 
+    /**
+     * Extra constants that are seeded at depth 2 rather than depth 1, so they cost more to use (they cannot appear at
+     * depth 1, and combining one is as costly as a 2-deep subtree) but stay available when genuinely needed. Extend
+     * this list the same way as atoms().
+     */
+    static const std::vector<std::pair<double, std::string>>& constants() {
+        static const std::vector<std::pair<double, std::string>> values = build_constants();
+        return values;
+    }
+
     static std::vector<std::vector<double>> initialize_values() {
         std::vector<std::vector<double>> result;
         result.emplace_back(std::vector<double>()); // This one stays empty because we want the vector to be 1-indexed.
@@ -49,6 +59,12 @@ public:
         // sqrt is unary and costs exactly one depth: the square roots of the depth-(d-1) values belong at depth d.
         generate_roots(values_per_depth[depth - 1], result);
         integrate_chunk(result, previous_fill, clock);
+        // The extra constants are seeded once, at their home depth of 2.
+        if (depth == 2) {
+            previous_fill = result.size();
+            seed_constants(result);
+            integrate_chunk(result, previous_fill, clock);
+        }
     }
 
 private:
@@ -60,6 +76,21 @@ private:
         atoms.emplace_back(M_PI, "pi");
         atoms.emplace_back(M_E, "e");
         return atoms;
+    }
+
+    static std::vector<std::pair<double, std::string>> build_constants() {
+        std::vector<std::pair<double, std::string>> constants;
+        constants.emplace_back((1.0 + std::sqrt(5.0)) / 2.0, "phi"); // golden ratio
+        constants.emplace_back(0.5772156649015329, "gamma");         // Euler-Mascheroni constant
+        return constants;
+    }
+
+    // Appends the seeded constants to result. Called once, when result is the depth-2 tier.
+    static void seed_constants(std::vector<double>& result) {
+        LOG_AT(LogLevel::INFO) << "Seeding " << constants().size() << " depth-2 constants." << std::endl;
+        for (const auto& [value, label] : constants()) {
+            result.emplace_back(value);
+        }
     }
 
     /**

@@ -291,6 +291,18 @@ private:
         return leaf;
     }
 
+    // Closest seeded depth-2 constant to to_find, or nullptr if no constants are configured. Constants are extra
+    // building blocks (e.g. the golden ratio) that live only at depth 2, so this is consulted only there.
+    const std::pair<double, std::string>* closest_constant(double to_find) const {
+        const std::pair<double, std::string>* best = nullptr;
+        double dist = 0;
+        for (const auto& c : constants) {
+            const double d = std::abs(to_find - c.first);
+            if (best == nullptr || d < dist) { dist = d; best = &c; }
+        }
+        return best;
+    }
+
     // Operator binding strength for minimal parenthesization (higher binds tighter). Leaves and the log_b(a) form
     // are self-delimiting, so they rank as atomic and never need parentheses around them.
     static int precedence(const Formula& f) {
@@ -371,6 +383,16 @@ public:
             // A depth-1 root search might not land on an exact atom; reconstruction always does.
             return ROOT ? find_depth_one(to_find) : exact_depth_one_match(to_find);
         }
+        if constexpr (!ROOT) {
+            // A depth-2 operand may be a seeded constant: recognise it as a leaf instead of rebuilding it from atoms
+            // (which would generally fail, since constants are not reachable from the depth-1 atoms).
+            if (depth == 2) {
+                if (const auto* c = closest_constant(to_find); c != nullptr && c->first == to_find) {
+                    Formula leaf; leaf.label = c->second; leaf.value = c->first;
+                    return leaf;
+                }
+            }
+        }
         SimpleClock depth_clock; // Times this depth's search; only read for the top-level (ROOT) call.
         if constexpr (ROOT) {
             depth_clock.start();
@@ -405,21 +427,39 @@ public:
         if (depth - 1 < sources.size()) {
             merge_sqrt<ROOT>(sources[depth - 1], to_find, best, depth - 1);
         }
+        // A seeded constant lives at depth 2 but is not in sources yet when depth 2 is searched (it is added by the
+        // following generate_values call), so the root depth-2 search compares against it explicitly. Deeper searches
+        // pick constants up for free, as they are by then present in sources[2].
+        const std::pair<double, std::string>* winning_constant = nullptr;
+        if constexpr (ROOT) {
+            if (depth == 2) {
+                if (const auto* c = closest_constant(to_find); c != nullptr
+                        && std::abs(to_find - c->first) < best.absolute_difference) {
+                    winning_constant = c;
+                    best.absolute_difference = std::abs(to_find - c->first);
+                }
+            }
+        }
         // Timing is measured over the search only; reconstruction below re-searches the (cheap, shallow) operands.
         double seconds = 0;
         if constexpr (ROOT) { seconds = depth_clock.end(); }
 
         Formula node;
-        node.op = best.operation;
-        node.first = std::make_unique<Formula>(findAndPrint<false>(best.depth1, sources, best.operand1));
-        if (best.operation == Utils::SQRT) { // unary: no second operand, value is sqrt of the one child
-            node.value = Utils::apply_runtime(Utils::SQRT, node.first->value, 0.0);
-            assert(reproduces(node.first->value, best.operand1));
+        if (winning_constant != nullptr) { // a bare constant beat every binary/sqrt combination
+            node.label = winning_constant->second;
+            node.value = winning_constant->first;
         } else {
-            node.second = std::make_unique<Formula>(findAndPrint<false>(depth - best.depth1, sources, best.operand2));
-            node.value  = Utils::apply_runtime(best.operation, node.first->value, node.second->value);
-            // The rebuilt operands must reproduce the doubles the search picked, or the printed formula would lie.
-            assert(reproduces(node.first->value, best.operand1) && reproduces(node.second->value, best.operand2));
+            node.op = best.operation;
+            node.first = std::make_unique<Formula>(findAndPrint<false>(best.depth1, sources, best.operand1));
+            if (best.operation == Utils::SQRT) { // unary: no second operand, value is sqrt of the one child
+                node.value = Utils::apply_runtime(Utils::SQRT, node.first->value, 0.0);
+                assert(reproduces(node.first->value, best.operand1));
+            } else {
+                node.second = std::make_unique<Formula>(findAndPrint<false>(depth - best.depth1, sources, best.operand2));
+                node.value  = Utils::apply_runtime(best.operation, node.first->value, node.second->value);
+                // The rebuilt operands must reproduce the doubles the search picked, or the printed formula would lie.
+                assert(reproduces(node.first->value, best.operand1) && reproduces(node.second->value, best.operand2));
+            }
         }
 
         if constexpr (ROOT) {
@@ -433,12 +473,14 @@ public:
         return node;
     }
 
-    explicit MergeFinder(const std::vector<std::pair<double, std::string>>& atoms)
-        : atoms(atoms) {
+    MergeFinder(const std::vector<std::pair<double, std::string>>& atoms,
+                const std::vector<std::pair<double, std::string>>& constants)
+        : atoms(atoms), constants(constants) {
     }
 
 private:
-    const std::vector<std::pair<double, std::string>>& atoms; // depth-1 {value, symbol} pairs, for printing leaves.
+    const std::vector<std::pair<double, std::string>>& atoms;     // depth-1 {value, symbol} pairs, for printing leaves.
+    const std::vector<std::pair<double, std::string>>& constants; // depth-2 {value, symbol} pairs, the seeded constants.
 
     static constexpr std::string_view op_strings[] = {[Utils::ADD] = "+", [Utils::SUB1] = "-", [Utils::SUB2] = "-",
                                 [Utils::MUL] = "*", [Utils::DIV1] = "/", [Utils::DIV2] = "/", [Utils::POW1] = "pow1",
