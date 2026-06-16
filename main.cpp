@@ -6,6 +6,7 @@
 #include "FormulaFinder.h"
 #include "Utils.h"
 #include "Generator.h"
+#include "Real.h"
 #include "Log.h"
 
 namespace {
@@ -13,8 +14,14 @@ namespace {
 constexpr size_t DEFAULT_MAX_DEPTH = 8;
 constexpr LogLevel DEFAULT_LOG_LEVEL = LogLevel::INFO;
 // Value tiers are materialized only up to this depth; deeper searches reuse the deepest tier (see findAndPrint's
-// jump logic). Generating past this is the current memory/time ceiling, so it stays an internal constant for now
-// rather than a CLI knob.
+// jump logic). Generating past this is the current memory ceiling, so it stays an internal constant for now rather
+// than a CLI knob.
+//
+// Depth 6 is the wall: combining tier 5 (~44.5M) with the 10 atoms alone yields ~3.5 billion values (~26 GB) that
+// must be materialized contiguously before they can be sorted and pruned, with ~46 GB of raw output in total and a
+// final deduped tier estimated at ~14-24 GB. reserve / in-place pruning do not help -- that raw chunk is the floor.
+// Reaching depth 6 would need sub-chunked, incrementally pruned generation (to bound the transient) or an
+// out-of-core redesign (to fit the final tier). See git history for the full breakdown.
 constexpr size_t GENERATION_CAP = 5;
 
 void print_usage(const char* program) {
@@ -54,7 +61,7 @@ bool parse_args(int argc, char** argv, size_t& max_depth, LogLevel& level) {
 }
 
 // Reads a finite target value from stdin, re-prompting on garbage. Returns false on EOF (e.g. a closed pipe).
-bool prompt_target(double& to_find) {
+bool prompt_target(Real& to_find) {
     std::cout << "Enter the target value to approximate: " << std::flush;
     while (!(std::cin >> to_find) || !std::isfinite(to_find)) {
         if (std::cin.eof()) { return false; }
@@ -76,7 +83,7 @@ int main(int argc, char** argv) {
     }
     Log::set_level(level);
 
-    double to_find = 0;
+    Real to_find = 0;
     if (!prompt_target(to_find)) {
         std::cerr << "No target value provided." << std::endl;
         return 1;

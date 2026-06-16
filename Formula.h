@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include "Operators.h"
+#include "Real.h"
 
 /**
  * A reconstructed formula. A leaf carries an atom's symbol; an internal node carries an operator and its two
@@ -12,7 +13,7 @@
 struct Formula {
     std::string label;                       // set iff this is a leaf
     Operators::Op op{};                      // operator, for internal nodes
-    double value{};                          // value this subtree evaluates to
+    Real value{};                            // value this subtree evaluates to
     std::unique_ptr<Formula> first, second;  // operand1, operand2 subtrees
     bool is_leaf() const { return first == nullptr; }                        // no children
     bool is_unary() const { return first != nullptr && second == nullptr; }  // one child (e.g. sqrt)

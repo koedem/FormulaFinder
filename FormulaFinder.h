@@ -9,6 +9,7 @@
 #include "Formula.h"
 #include "MergeFinder.h"
 #include "Operators.h"
+#include "Real.h"
 #include "SimpleClock.h"
 #include "Log.h"
 
@@ -19,8 +20,8 @@
  */
 class FormulaFinder {
 public:
-    FormulaFinder(const std::vector<std::pair<double, std::string>>& atoms,
-                  const std::vector<std::pair<double, std::string>>& constants)
+    FormulaFinder(const std::vector<std::pair<Real, std::string>>& atoms,
+                  const std::vector<std::pair<Real, std::string>>& constants)
         : atoms(atoms), constants(constants) {
     }
 
@@ -31,7 +32,7 @@ public:
      * @param to_find the value to approximate.
      */
     template<bool ROOT>
-    Formula findAndPrint(size_t depth, std::vector<std::vector<double>>& sources, double to_find) {
+    Formula findAndPrint(size_t depth, std::vector<std::vector<Real>>& sources, Real to_find) {
         if (depth == 1) {
             // A depth-1 root search might not land on an exact atom; reconstruction always does.
             return ROOT ? find_depth_one(to_find) : exact_depth_one_match(to_find);
@@ -55,7 +56,7 @@ public:
         // A seeded constant lives at depth 2 but is not in sources yet when depth 2 is searched (it is added by the
         // following generate_values call), so the root depth-2 search compares against it explicitly. Deeper searches
         // pick constants up for free, as they are by then present in sources[2].
-        const std::pair<double, std::string>* winning_constant = nullptr;
+        const std::pair<Real, std::string>* winning_constant = nullptr;
         if constexpr (ROOT) {
             if (depth == 2) {
                 if (const auto* c = closest_constant(to_find); c != nullptr
@@ -99,7 +100,7 @@ public:
 
 private:
     // Reconstruction reaches a depth-1 operand whose value is exactly one of the atoms; return that atom as a leaf.
-    Formula exact_depth_one_match(double to_find) const {
+    Formula exact_depth_one_match(Real to_find) const {
         for (const auto& [value, label] : atoms) {
             if (value == to_find) {
                 Formula leaf; leaf.label = label; leaf.value = value;
@@ -111,9 +112,9 @@ private:
     }
 
     // Top-level depth-1 search: no exact match guaranteed, so return the closest atom as a leaf.
-    Formula find_depth_one(double to_find) const {
-        const std::pair<double, std::string>* best = nullptr;
-        double high_score = std::abs(to_find);
+    Formula find_depth_one(Real to_find) const {
+        const std::pair<Real, std::string>* best = nullptr;
+        Real high_score = std::abs(to_find);
         for (const auto& atom : atoms) {
             if (best == nullptr || std::abs(to_find - atom.first) < high_score) {
                 high_score = std::abs(to_find - atom.first);
@@ -126,21 +127,21 @@ private:
 
     // Closest seeded depth-2 constant to to_find, or nullptr if no constants are configured. Constants are extra
     // building blocks (e.g. the golden ratio) that live only at depth 2, so this is consulted only there.
-    const std::pair<double, std::string>* closest_constant(double to_find) const {
-        const std::pair<double, std::string>* best = nullptr;
-        double dist = 0;
+    const std::pair<Real, std::string>* closest_constant(Real to_find) const {
+        const std::pair<Real, std::string>* best = nullptr;
+        Real dist = 0;
         for (const auto& c : constants) {
-            const double d = std::abs(to_find - c.first);
+            const Real d = std::abs(to_find - c.first);
             if (best == nullptr || d < dist) { dist = d; best = &c; }
         }
         return best;
     }
 
     // True when the rebuilt subtree reproduces the value the search reported for it (relative tolerance for scale).
-    static bool reproduces(double got, double want) {
-        return std::abs(got - want) <= 1e-9 * std::max(1.0, std::abs(want));
+    static bool reproduces(Real got, Real want) {
+        return std::abs(got - want) <= 1e-9 * std::max(Real(1.0), std::abs(want));
     }
 
-    const std::vector<std::pair<double, std::string>>& atoms;     // depth-1 {value, symbol} pairs, for printing leaves.
-    const std::vector<std::pair<double, std::string>>& constants; // depth-2 {value, symbol} pairs, the seeded constants.
+    const std::vector<std::pair<Real, std::string>>& atoms;     // depth-1 {value, symbol} pairs, for printing leaves.
+    const std::vector<std::pair<Real, std::string>>& constants; // depth-2 {value, symbol} pairs, the seeded constants.
 };

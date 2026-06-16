@@ -7,6 +7,7 @@
 #include <string_view>
 #include "SimpleClock.h"
 #include "Operators.h"
+#include "Real.h"
 #include "Log.h"
 
 /**
@@ -22,8 +23,8 @@ public:
     // The closest match the search found: the two operand values, their absolute distance to the target, the
     // operator relating them, and how much of the total depth went to operand1 (operand2 gets the rest).
     struct FormulaData {
-        double operand1, operand2;
-        double absolute_difference;
+        Real operand1, operand2;
+        Real absolute_difference;
         Operators::Op operation;
         size_t depth1; // Remaining depth for operand1
     };
@@ -37,7 +38,7 @@ public:
      * @param to_find the value to approximate.
      */
     template<bool ROOT>
-    static FormulaData search(size_t depth, const std::vector<std::vector<double>>& sources, double to_find) {
+    static FormulaData search(size_t depth, const std::vector<std::vector<Real>>& sources, Real to_find) {
         FormulaData best{};
         best.absolute_difference = std::abs(to_find) + 10;
         size_t larger_depth = depth - 1;
@@ -46,8 +47,8 @@ public:
             larger_depth = sources.size() - 1;
         }
         while (larger_depth * 2 >= depth) {
-            const std::vector<double>& large = sources[larger_depth];
-            const std::vector<double>& small = sources[depth - larger_depth];
+            const std::vector<Real>& large = sources[larger_depth];
+            const std::vector<Real>& small = sources[depth - larger_depth];
             merge_full<ROOT, Operators::ADD, +1, +1>(large, small, to_find, best, larger_depth);   // a+b
             merge_full<ROOT, Operators::SUB1, +1, -1>(large, small, to_find, best, larger_depth);  // a-b
             merge_full<ROOT, Operators::SUB2, -1, +1>(large, small, to_find, best, larger_depth);  // b-a
@@ -90,14 +91,14 @@ private:
     // ADD / SUB1 / SUB2 are strictly monotone in each operand with a fixed sign over the *entire* large x small
     // rectangle (no sign-dependent sub-regions), so each reduces to a single full-block merge_region sweep.
     template<bool ROOT, Operators::Op OP, int SA, int SB>
-    static void merge_full(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_full(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t(Operators::symbol(OP), ROOT);
         merge_region<OP, SA, SB>(large, small, 0, large.size(), 0, small.size(), to_find, best, first_depth);
     }
 
-    static void update_best(double x, double a, double b, Operators::Op op, size_t first_depth,
-                            double to_find, FormulaData& best) {
+    static void update_best(Real x, Real a, Real b, Operators::Op op, size_t first_depth,
+                            Real to_find, FormulaData& best) {
         if (std::isfinite(x) && std::abs(to_find - x) < best.absolute_difference) {
             best.absolute_difference = std::abs(to_find - x);
             best.operation = op;
@@ -116,9 +117,9 @@ private:
      * otherwise, providing the opposing control needed to home in on to_find.
      */
     template<Operators::Op OP, int SA, int SB>
-    static void merge_region(const std::vector<double>& large, const std::vector<double>& small,
+    static void merge_region(const std::vector<Real>& large, const std::vector<Real>& small,
                              size_t iLo, size_t iHi, size_t jLo, size_t jHi,
-                             double to_find, FormulaData& best, const size_t first_depth) {
+                             Real to_find, FormulaData& best, const size_t first_depth) {
         if (iLo >= iHi || jLo >= jHi) {
             return;
         }
@@ -126,7 +127,7 @@ private:
         size_t i = iLo;
         size_t j = (jDir < 0) ? jHi - 1 : jLo;
         while (true) {
-            double x = Operators::apply_operator<OP>(large[i], small[j]);
+            Real x = Operators::apply_operator<OP>(large[i], small[j]);
             update_best(x, large[i], small[j], OP, first_depth, to_find, best);
             // SA > 0: advancing i grows x, so we advance i to grow and step j to shrink (and vice versa for SA < 0).
             bool advance_i = (SA > 0) ? (x <= to_find) : (x > to_find);
@@ -149,7 +150,7 @@ private:
 
     // Split points of a sorted vector at zero: [0, neg) are negative, [neg, pos) are zero, [pos, size) are positive.
     struct SignSplit { size_t neg, pos; };
-    static SignSplit sign_split(const std::vector<double>& v) {
+    static SignSplit sign_split(const std::vector<Real>& v) {
         return { static_cast<size_t>(std::lower_bound(v.begin(), v.end(), 0.0) - v.begin()),
                  static_cast<size_t>(std::upper_bound(v.begin(), v.end(), 0.0) - v.begin()) };
     }
@@ -157,14 +158,14 @@ private:
     // Split points of a sorted vector for pow/log: [pos, oneLo) lies in (0, 1), [oneLo, oneHi) equals 1,
     // [oneHi, size) is > 1. Values <= 0 (indices [0, pos)) are outside the real/monotone domain and ignored.
     struct PosSplit { size_t pos, oneLo, oneHi; };
-    static PosSplit pos_split(const std::vector<double>& v) {
+    static PosSplit pos_split(const std::vector<Real>& v) {
         return { static_cast<size_t>(std::upper_bound(v.begin(), v.end(), 0.0) - v.begin()),
                  static_cast<size_t>(std::lower_bound(v.begin(), v.end(), 1.0) - v.begin()),
                  static_cast<size_t>(std::upper_bound(v.begin(), v.end(), 1.0) - v.begin()) };
     }
 
     template<bool ROOT>
-    static void merge_mul(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_mul(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                           FormulaData& best, const size_t first_depth) {
         OpTimer t("Mul", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -178,7 +179,7 @@ private:
     }
 
     template<bool ROOT>
-    static void merge_div1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_div1(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("Div1", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -194,7 +195,7 @@ private:
     }
 
     template<bool ROOT>
-    static void merge_div2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_div2(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("Div2", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -212,7 +213,7 @@ private:
     // pow(a, b): base a = large (split at 1, must be > 0), exponent b = small (split at 0).
     // d/da = b*a^(b-1) so SA = sign(b); d/db = a^b*ln(a) so SB = sign(a - 1).
     template<bool ROOT>
-    static void merge_pow1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_pow1(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("pow1", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -229,7 +230,7 @@ private:
     // pow(b, a): base b = small (split at 1, must be > 0), exponent a = large (split at 0).
     // d/da = b^a*ln(b) so SA = sign(b - 1); d/db = a*b^(a-1) so SB = sign(a).
     template<bool ROOT>
-    static void merge_pow2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_pow2(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("pow2", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -246,7 +247,7 @@ private:
     // log(a)/log(b) = log_b(a): a = large, b = small, both split at 1 and required > 0 (b != 1).
     // SA = sign(b - 1); SB = -sign(a - 1).
     template<bool ROOT>
-    static void merge_log1(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_log1(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("log1", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -264,7 +265,7 @@ private:
     // log(b)/log(a) = log_a(b): a = large, b = small, both split at 1 and required > 0 (a != 1).
     // SA = -sign(b - 1); SB = sign(a - 1).
     template<bool ROOT>
-    static void merge_log2(const std::vector<double>& large, const std::vector<double>& small, double to_find,
+    static void merge_log2(const std::vector<Real>& large, const std::vector<Real>& small, Real to_find,
                            FormulaData& best, const size_t first_depth) {
         OpTimer t("log2", ROOT);
         const size_t N = large.size(), M = small.size();
@@ -283,7 +284,7 @@ private:
     // depth-(d-1) values. sqrt is monotone increasing on v >= 0, so the closest sqrt(v) to to_find sits at the v
     // closest to to_find^2 -- one binary search plus its two neighbours, rather than a full sweep.
     template<bool ROOT>
-    static void merge_sqrt(const std::vector<double>& source, double to_find, FormulaData& best, const size_t first_depth) {
+    static void merge_sqrt(const std::vector<Real>& source, Real to_find, FormulaData& best, const size_t first_depth) {
         OpTimer t("sqrt", ROOT);
         const size_t pos = static_cast<size_t>(std::lower_bound(source.begin(), source.end(), 0.0) - source.begin());
         if (pos >= source.size()) { return; } // no non-negative radicands
@@ -294,7 +295,7 @@ private:
             consider(pos);
             return;
         }
-        const double target = to_find * to_find;
+        const Real target = to_find * to_find;
         const size_t idx = static_cast<size_t>(std::lower_bound(source.begin() + pos, source.end(), target) - source.begin());
         if (idx < source.size()) { consider(idx); }      // smallest v >= to_find^2
         if (idx > pos)          { consider(idx - 1); }   // largest v < to_find^2

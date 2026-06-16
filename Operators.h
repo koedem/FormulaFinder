@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <string_view>
+#include "Real.h"
 
 /**
  * Centralized operator vocabulary: the operator set plus everything derived from it -- how each evaluates (both
@@ -16,7 +17,7 @@ public:
 
     // Compile-time evaluation, selected by the operator template argument so the search's hot loops inline it.
     template<Op OP>
-    static double apply_operator(double a, double b) {
+    static Real apply_operator(Real a, Real b) {
         if constexpr (OP == ADD) {
             return a + b;
         } else if constexpr (OP == SUB1) {
@@ -30,19 +31,19 @@ public:
         } else if constexpr (OP == DIV2) {
             return b / a;
         } else if constexpr (OP == POW1) {
-            return pow(a, b);
+            return std::pow(a, b);
         } else if constexpr (OP == POW2) {
-            return pow(b, a);
+            return std::pow(b, a);
         } else if constexpr (OP == LOG1) {
-            return log(a) / log(b);
+            return std::log(a) / std::log(b);
         } else if constexpr (OP == LOG2) {
-            return log(b) / log(a);
+            return std::log(b) / std::log(a);
         }
     }
 
     // Runtime counterpart of apply_operator, for evaluating a reconstructed formula tree whose operators are only
     // known at run time. Mirrors apply_operator exactly so a rebuilt tree reproduces the searched value.
-    static double apply_runtime(Op op, double a, double b) {
+    static Real apply_runtime(Op op, Real a, Real b) {
         switch (op) {
             case ADD:  return a + b;
             case SUB1: return a - b;
@@ -54,7 +55,7 @@ public:
             case POW2: return pow(b, a);
             case LOG1: return log(a) / log(b);
             case LOG2: return log(b) / log(a);
-            case SQRT: return sqrt(a); // unary: b is ignored
+            case SQRT: return std::sqrt(a); // unary: b is ignored
         }
         return 0.0; // unreachable
     }

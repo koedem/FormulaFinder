@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 #include "SimpleClock.h"
+#include "Real.h"
 #include "Log.h"
 
 class Generator {
@@ -17,8 +18,8 @@ public:
      * Single source of truth for the depth-1 atoms: each is a numeric value paired with the symbol printed for it.
      * Adding constants (e.g. {std::sqrt(2.0), "sqrt2"}) only requires extending this list.
      */
-    static const std::vector<std::pair<double, std::string>>& atoms() {
-        static const std::vector<std::pair<double, std::string>> values = build_atoms();
+    static const std::vector<std::pair<Real, std::string>>& atoms() {
+        static const std::vector<std::pair<Real, std::string>> values = build_atoms();
         return values;
     }
 
@@ -27,15 +28,15 @@ public:
      * depth 1, and combining one is as costly as a 2-deep subtree) but stay available when genuinely needed. Extend
      * this list the same way as atoms().
      */
-    static const std::vector<std::pair<double, std::string>>& constants() {
-        static const std::vector<std::pair<double, std::string>> values = build_constants();
+    static const std::vector<std::pair<Real, std::string>>& constants() {
+        static const std::vector<std::pair<Real, std::string>> values = build_constants();
         return values;
     }
 
-    static std::vector<std::vector<double>> initialize_values() {
-        std::vector<std::vector<double>> result;
-        result.emplace_back(std::vector<double>()); // This one stays empty because we want the vector to be 1-indexed.
-        result.emplace_back(std::vector<double>());
+    static std::vector<std::vector<Real>> initialize_values() {
+        std::vector<std::vector<Real>> result;
+        result.emplace_back(std::vector<Real>()); // This one stays empty because we want the vector to be 1-indexed.
+        result.emplace_back(std::vector<Real>());
         for (const auto& [value, label] : atoms()) {
             result[1].emplace_back(value);
         }
@@ -43,10 +44,10 @@ public:
         return result;
     }
 
-    static void generate_values(std::vector<std::vector<double>>& values_per_depth, size_t depth) {
+    static void generate_values(std::vector<std::vector<Real>>& values_per_depth, size_t depth) {
         assert(values_per_depth.size() == depth);
-        values_per_depth.emplace_back(std::vector<double>());
-        std::vector<double>& result = values_per_depth[depth];
+        values_per_depth.emplace_back(std::vector<Real>());
+        std::vector<Real>& result = values_per_depth[depth];
         // Size the tier once, exactly: no reallocation while generating, and since the reserved-but-unwritten tail
         // never faults in, resident memory stays bounded by the live element count rather than the reservation.
         result.reserve(planned_output_size(values_per_depth, depth));
@@ -68,25 +69,25 @@ public:
     }
 
 private:
-    static std::vector<std::pair<double, std::string>> build_atoms() {
-        std::vector<std::pair<double, std::string>> atoms;
+    static std::vector<std::pair<Real, std::string>> build_atoms() {
+        std::vector<std::pair<Real, std::string>> atoms;
         for (int i = 1; i <= 8; i++) {
-            atoms.emplace_back(static_cast<double>(i), std::to_string(i));
+            atoms.emplace_back(static_cast<Real>(i), std::to_string(i));
         }
-        atoms.emplace_back(M_PI, "pi");
-        atoms.emplace_back(M_E, "e");
+        atoms.emplace_back(M_PIl, "pi"); // long double literals so pi/e carry full Real precision, not just double's.
+        atoms.emplace_back(M_El, "e");
         return atoms;
     }
 
-    static std::vector<std::pair<double, std::string>> build_constants() {
-        std::vector<std::pair<double, std::string>> constants;
-        constants.emplace_back((1.0 + std::sqrt(5.0)) / 2.0, "phi"); // golden ratio
-        constants.emplace_back(0.5772156649015329, "gamma");         // Euler-Mascheroni constant
+    static std::vector<std::pair<Real, std::string>> build_constants() {
+        std::vector<std::pair<Real, std::string>> constants;
+        constants.emplace_back((1.0L + std::sqrt(5.0L)) / 2.0L, "phi"); // golden ratio, computed in Real precision
+        constants.emplace_back(0.5772156649015328606L, "gamma");        // Euler-Mascheroni constant (long double digits)
         return constants;
     }
 
     // Appends the seeded constants to result. Called once, when result is the depth-2 tier.
-    static void seed_constants(std::vector<double>& result) {
+    static void seed_constants(std::vector<Real>& result) {
         LOG_AT(LogLevel::INFO) << "Seeding " << constants().size() << " depth-2 constants." << std::endl;
         for (const auto& [value, label] : constants()) {
             result.emplace_back(value);
@@ -99,7 +100,7 @@ private:
      * size of the merged range; sorting the whole tier in place (introsort allocates nothing) trades some extra
      * sorting work for a markedly smaller peak footprint.
      */
-    static void integrate_chunk(std::vector<double>& result, SimpleClock& clock) {
+    static void integrate_chunk(std::vector<Real>& result, SimpleClock& clock) {
         clock.start();
         std::sort(result.begin(), result.end());
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds used for sorting." << std::endl;
@@ -112,29 +113,29 @@ private:
      * @param source values from the depth one below the target depth.
      * @param result the target depth's value vector, appended to in place.
      */
-    static void generate_roots(const std::vector<double>& source, std::vector<double>& result) {
+    static void generate_roots(const std::vector<Real>& source, std::vector<Real>& result) {
         LOG_AT(LogLevel::INFO) << "Start root generation." << std::endl;
         SimpleClock clock;
         clock.start();
-        for (double v : source) {
+        for (Real v : source) {
             if (v >= 0) {
-                result.emplace_back(sqrt(v));
+                result.emplace_back(std::sqrt(v));
             }
         }
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end root generation." << std::endl;
     }
 
-    static size_t count_positive(const std::vector<double>& v) { // strictly > 0; v is sorted ascending.
+    static size_t count_positive(const std::vector<Real>& v) { // strictly > 0; v is sorted ascending.
         return static_cast<size_t>(v.end() - std::upper_bound(v.begin(), v.end(), 0.0));
     }
 
-    static size_t count_nonneg(const std::vector<double>& v) {    // >= 0; v is sorted ascending.
+    static size_t count_nonneg(const std::vector<Real>& v) {    // >= 0; v is sorted ascending.
         return static_cast<size_t>(v.end() - std::lower_bound(v.begin(), v.end(), 0.0));
     }
 
     // Exactly how many values generator(s1, s2, ...) appends: six results per pair, plus pow(a, b) for each a > 0,
     // pow(b, a) for each b > 0, and one log(a) per a > 0. Mirrors generator's branches.
-    static size_t generator_output_size(const std::vector<double>& s1, const std::vector<double>& s2) {
+    static size_t generator_output_size(const std::vector<Real>& s1, const std::vector<Real>& s2) {
         const size_t n1 = s1.size(), n2 = s2.size();
         const size_t pos1 = count_positive(s1), pos2 = count_positive(s2);
         return 6 * n1 * n2 + pos1 * n2 + n1 * pos2 + pos1;
@@ -143,7 +144,7 @@ private:
     // Total number of values generate_values will append for this depth, before any pruning -- the exact capacity
     // the result tier needs. Mirrors the chunk sequence of generate_values (binary combinations, then the unary
     // sqrt pass, then the seeded constants at depth 2), so the two must be kept in step.
-    static size_t planned_output_size(const std::vector<std::vector<double>>& values_per_depth, size_t depth) {
+    static size_t planned_output_size(const std::vector<std::vector<Real>>& values_per_depth, size_t depth) {
         size_t total = 0;
         size_t large_half = depth - 1;
         while (large_half * 2 >= depth) {
@@ -162,12 +163,12 @@ private:
      * @param source2 containing no infinite or NaN values.
      * @param result all results for OP(x, y) for x in source1, y in source2.
      */
-    static void generator(const std::vector<double> &source1, const std::vector<double> &source2, std::vector<double> &result) {
+    static void generator(const std::vector<Real> &source1, const std::vector<Real> &source2, std::vector<Real> &result) {
         LOG_AT(LogLevel::INFO) << "Start generation." << std::endl;
         SimpleClock clock;
         clock.start();
-        for (double a : source1) {
-            for (double b : source2) {
+        for (Real a : source1) {
+            for (Real b : source2) {
                 result.emplace_back(a + b);
                 result.emplace_back(a - b);
                 result.emplace_back(b - a);
@@ -175,14 +176,14 @@ private:
                 result.emplace_back(a / b);
                 result.emplace_back(b / a);
                 if (a > 0) { // For negative values of a, this can lead to NaNs. In general not much reason to use these type of values.
-                    result.emplace_back(pow(a, b));
+                    result.emplace_back(std::pow(a, b));
                 }
                 if (b > 0) {
-                    result.emplace_back(pow(b, a));
+                    result.emplace_back(std::pow(b, a));
                 }
             }
             if (a > 0) {
-                result.emplace_back(log(a)); // sqrt is generated separately as a unary pass; natural log stays here.
+                result.emplace_back(std::log(a)); // sqrt is generated separately as a unary pass; natural log stays here.
             }
         }
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end generation." << std::endl;
@@ -195,14 +196,14 @@ private:
      * from the previous survivor.
      * @param values in ascending order, not containing any NaN values.
      */
-    static void prune_duplicates(std::vector<double> &values) {
+    static void prune_duplicates(std::vector<Real> &values) {
         SimpleClock clock;
         clock.start();
         LOG_AT(LogLevel::INFO) << "Start pruning." << std::endl;
         const size_t before = values.size();
         size_t write = 0;
         for (size_t read = 0; read < values.size(); read++) {
-            const double v = values[read];
+            const Real v = values[read];
             if (std::isfinite(v) && (write == 0 || v != values[write - 1])) {
                 values[write++] = v;
             }
