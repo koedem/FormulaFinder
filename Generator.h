@@ -47,23 +47,23 @@ public:
         assert(values_per_depth.size() == depth);
         values_per_depth.emplace_back(std::vector<double>());
         std::vector<double>& result = values_per_depth[depth];
+        // Size the tier once, exactly: no reallocation while generating, and since the reserved-but-unwritten tail
+        // never faults in, resident memory stays bounded by the live element count rather than the reservation.
+        result.reserve(planned_output_size(values_per_depth, depth));
         SimpleClock clock;
-        size_t previous_fill = 0;
         size_t large_half = depth - 1;
         while (large_half * 2 >= depth) { // Otherwise it's not the larger half.
             generator(values_per_depth[large_half], values_per_depth[depth - large_half], result);
-            integrate_chunk(result, previous_fill, clock);
-            previous_fill = result.size();
+            integrate_chunk(result, clock);
             large_half--;
         }
         // sqrt is unary and costs exactly one depth: the square roots of the depth-(d-1) values belong at depth d.
         generate_roots(values_per_depth[depth - 1], result);
-        integrate_chunk(result, previous_fill, clock);
+        integrate_chunk(result, clock);
         // The extra constants are seeded once, at their home depth of 2.
         if (depth == 2) {
-            previous_fill = result.size();
             seed_constants(result);
-            integrate_chunk(result, previous_fill, clock);
+            integrate_chunk(result, clock);
         }
     }
 
@@ -94,15 +94,14 @@ private:
     }
 
     /**
-     * Sorts the freshly appended tail [previous_fill, end) of result, merges it into the already-sorted head, and
-     * prunes duplicates and non-finite values. previous_fill is result's size before the latest chunk was appended.
+     * Sorts the whole tier and prunes its duplicates and non-finite values. The freshly appended chunk could be
+     * sorted alone and merged into the already-sorted head, but std::inplace_merge allocates an auxiliary buffer the
+     * size of the merged range; sorting the whole tier in place (introsort allocates nothing) trades some extra
+     * sorting work for a markedly smaller peak footprint.
      */
-    static void integrate_chunk(std::vector<double>& result, size_t previous_fill, SimpleClock& clock) {
+    static void integrate_chunk(std::vector<double>& result, SimpleClock& clock) {
         clock.start();
-        std::sort(result.begin() + previous_fill, result.end()); // Don't need to sort what is already sorted.
-        if (previous_fill != 0) { // For the first chunk there is nothing in front to merge with.
-            std::inplace_merge(result.begin(), result.begin() + previous_fill, result.end());
-        }
+        std::sort(result.begin(), result.end());
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds used for sorting." << std::endl;
         prune_duplicates(result);
     }
@@ -123,6 +122,37 @@ private:
             }
         }
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end root generation." << std::endl;
+    }
+
+    static size_t count_positive(const std::vector<double>& v) { // strictly > 0; v is sorted ascending.
+        return static_cast<size_t>(v.end() - std::upper_bound(v.begin(), v.end(), 0.0));
+    }
+
+    static size_t count_nonneg(const std::vector<double>& v) {    // >= 0; v is sorted ascending.
+        return static_cast<size_t>(v.end() - std::lower_bound(v.begin(), v.end(), 0.0));
+    }
+
+    // Exactly how many values generator(s1, s2, ...) appends: six results per pair, plus pow(a, b) for each a > 0,
+    // pow(b, a) for each b > 0, and one log(a) per a > 0. Mirrors generator's branches.
+    static size_t generator_output_size(const std::vector<double>& s1, const std::vector<double>& s2) {
+        const size_t n1 = s1.size(), n2 = s2.size();
+        const size_t pos1 = count_positive(s1), pos2 = count_positive(s2);
+        return 6 * n1 * n2 + pos1 * n2 + n1 * pos2 + pos1;
+    }
+
+    // Total number of values generate_values will append for this depth, before any pruning -- the exact capacity
+    // the result tier needs. Mirrors the chunk sequence of generate_values (binary combinations, then the unary
+    // sqrt pass, then the seeded constants at depth 2), so the two must be kept in step.
+    static size_t planned_output_size(const std::vector<std::vector<double>>& values_per_depth, size_t depth) {
+        size_t total = 0;
+        size_t large_half = depth - 1;
+        while (large_half * 2 >= depth) {
+            total += generator_output_size(values_per_depth[large_half], values_per_depth[depth - large_half]);
+            large_half--;
+        }
+        total += count_nonneg(values_per_depth[depth - 1]); // the unary sqrt pass.
+        if (depth == 2) { total += constants().size(); }    // the seeded constants.
+        return total;
     }
 
     /**
@@ -159,22 +189,25 @@ private:
     }
 
     /**
-     * This function removes all duplicate values from a sorted vector.
-     * @param original values in ascending order, not containing any NaN values.
+     * This function removes all duplicate and non-finite values from a sorted vector, in place. A write cursor
+     * compacts the survivors toward the front and the tail is dropped with resize, so no second buffer is allocated
+     * (the capacity is retained for the next chunk). Equivalent to keeping each value that is finite and differs
+     * from the previous survivor.
+     * @param values in ascending order, not containing any NaN values.
      */
-    static void prune_duplicates(std::vector<double> &original) {
+    static void prune_duplicates(std::vector<double> &values) {
         SimpleClock clock;
         clock.start();
         LOG_AT(LogLevel::INFO) << "Start pruning." << std::endl;
-        std::vector<double> pruned;
-        for (double & i : original) {
-            if (pruned.empty() || i != pruned.back()) {
-                if (std::isfinite(i)) {
-                    pruned.emplace_back(i);
-                }
+        const size_t before = values.size();
+        size_t write = 0;
+        for (size_t read = 0; read < values.size(); read++) {
+            const double v = values[read];
+            if (std::isfinite(v) && (write == 0 || v != values[write - 1])) {
+                values[write++] = v;
             }
         }
-        LOG_AT(LogLevel::INFO) << clock.end() << " seconds, pruned " << original.size() << " to " << pruned.size() << std::endl;
-        original.swap(pruned);
+        values.resize(write); // drops the pruned tail without releasing capacity.
+        LOG_AT(LogLevel::INFO) << clock.end() << " seconds, pruned " << before << " to " << values.size() << std::endl;
     }
 };
