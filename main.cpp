@@ -3,7 +3,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
-#include "MergeFinder.h"
+#include "FormulaFinder.h"
 #include "Utils.h"
 #include "Generator.h"
 #include "Log.h"
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     }
 
     auto values_per_depth = Generator::initialize_values();
-    MergeFinder finder(Generator::atoms(), Generator::constants());
+    FormulaFinder finder(Generator::atoms(), Generator::constants());
 
     for (size_t depth = 2; depth <= max_depth; depth++) {
         finder.findAndPrint<true>(depth, values_per_depth, to_find);
