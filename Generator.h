@@ -4,6 +4,7 @@
 #include <cassert>
 #include <iostream>
 #include <cmath>
+#include <numbers>
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -75,15 +76,17 @@ private:
         for (int i = 1; i <= 8; i++) {
             atoms.emplace_back(static_cast<Real>(i), std::to_string(i));
         }
-        atoms.emplace_back(M_PIl, "pi"); // long double literals so pi/e carry full Real precision, not just double's.
-        atoms.emplace_back(M_El, "e");
+        // std::numbers gives the correctly-rounded constant at Real's precision, whatever Real is (double, long
+        // double, or a future std::float128_t) -- no precision-specific literal suffix to keep in sync.
+        atoms.emplace_back(std::numbers::pi_v<Real>, "pi");
+        atoms.emplace_back(std::numbers::e_v<Real>, "e");
         return atoms;
     }
 
     static std::vector<std::pair<Real, std::string>> build_constants() {
         std::vector<std::pair<Real, std::string>> constants;
-        constants.emplace_back((1.0L + std::sqrt(5.0L)) / 2.0L, "phi"); // golden ratio, computed in Real precision
-        constants.emplace_back(0.5772156649015328606L, "gamma");        // Euler-Mascheroni constant (long double digits)
+        constants.emplace_back(std::numbers::phi_v<Real>, "phi");     // golden ratio
+        constants.emplace_back(std::numbers::egamma_v<Real>, "gamma"); // Euler-Mascheroni constant
         return constants;
     }
 
