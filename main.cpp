@@ -24,40 +24,52 @@ constexpr LogLevel DEFAULT_LOG_LEVEL = LogLevel::INFO;
 // out-of-core redesign (to fit the final tier). See git history for the full breakdown.
 constexpr size_t GENERATION_CAP = 5;
 
-void print_usage(const char* program) {
-    std::cerr << "Usage: " << program << " [max_depth] [log_level]\n"
-              << "  max_depth   maximum expression depth to search (integer >= 2, default "
-              << DEFAULT_MAX_DEPTH << ")\n"
-              << "  log_level   SILENT | RESULT | INFO | DEBUG (default INFO)\n"
-              << "The target value is entered interactively after startup.\n";
+void print_usage(const char* program, std::ostream& out) {
+    out << "Usage: " << program << " [max_depth] [log_level]\n"
+        << "  max_depth   maximum expression depth to search (integer >= 2, default "
+        << DEFAULT_MAX_DEPTH << ")\n"
+        << "  log_level   SILENT | RESULT | INFO | DEBUG (default INFO)\n"
+        << "The target value is entered interactively after startup.\n";
 }
 
-// Parses the optional positional args into max_depth / level. Returns false (after printing usage) on bad input
-// or when help is requested, so main can exit.
-bool parse_args(int argc, char** argv, size_t& max_depth, LogLevel& level) {
+// Ok: proceed; Help: usage was explicitly requested (success); Error: bad input (already reported to stderr).
+enum class ParseResult { Ok, Help, Error };
+
+// Parses the optional positional args into max_depth / level. On Error the specific problem is written to stderr;
+// Help is returned for -h/--help so main can print usage to stdout and exit successfully.
+ParseResult parse_args(int argc, char** argv, size_t& max_depth, LogLevel& level) {
     for (int i = 1; i < argc; i++) {
         const std::string_view arg = argv[i];
-        if (arg == "-h" || arg == "--help") { return false; }
+        if (arg == "-h" || arg == "--help") { return ParseResult::Help; }
     }
     if (argc > 1) {
+        const std::string depth_arg = argv[1];
+        size_t consumed = 0;
+        int depth = 0;
         try {
-            const int depth = std::stoi(argv[1]);
-            if (depth < 2) { throw std::invalid_argument("depth too small"); }
-            max_depth = static_cast<size_t>(depth);
+            depth = std::stoi(depth_arg, &consumed);
         } catch (const std::exception&) {
-            std::cerr << "Invalid max_depth: '" << argv[1] << "'\n\n";
-            return false;
+            consumed = 0; // leave consumed < size so the check below rejects it
         }
+        if (consumed != depth_arg.size() || depth < 2) { // reject trailing garbage ("2.5", "8x") and depths < 2
+            std::cerr << "Invalid max_depth: '" << depth_arg << "'\n\n";
+            return ParseResult::Error;
+        }
+        max_depth = static_cast<size_t>(depth);
     }
     if (argc > 2) {
         if (const auto parsed = Log::parse_level(argv[2])) {
             level = *parsed;
         } else {
             std::cerr << "Invalid log_level: '" << argv[2] << "'\n\n";
-            return false;
+            return ParseResult::Error;
         }
     }
-    return argc <= 3; // extra positional args are a mistake worth flagging.
+    if (argc > 3) {
+        std::cerr << "Too many arguments.\n\n";
+        return ParseResult::Error;
+    }
+    return ParseResult::Ok;
 }
 
 // Reads a finite target value from stdin, re-prompting on garbage. Returns false on EOF (e.g. a closed pipe).
@@ -77,9 +89,10 @@ bool prompt_target(Real& to_find) {
 int main(int argc, char** argv) {
     size_t max_depth = DEFAULT_MAX_DEPTH;
     LogLevel level = DEFAULT_LOG_LEVEL;
-    if (!parse_args(argc, argv, max_depth, level)) {
-        print_usage(argv[0]);
-        return 1;
+    switch (parse_args(argc, argv, max_depth, level)) {
+        case ParseResult::Help:  print_usage(argv[0], std::cout); return 0;
+        case ParseResult::Error: print_usage(argv[0], std::cerr); return 1;
+        case ParseResult::Ok:    break;
     }
     Log::set_level(level);
 
