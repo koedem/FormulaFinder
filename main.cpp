@@ -24,10 +24,15 @@ constexpr LogLevel DEFAULT_LOG_LEVEL = LogLevel::INFO;
 // out-of-core redesign (to fit the final tier). See git history for the full breakdown.
 constexpr size_t GENERATION_CAP = 5;
 
+// The deepest formula a search can build reuses two depth-GENERATION_CAP subtrees, so 2 * GENERATION_CAP is the
+// largest satisfiable depth. Searching past it would find no candidate at all and leave the reconstruction with
+// nothing to rebuild, so max_depth is capped here.
+constexpr size_t MAX_SEARCH_DEPTH = 2 * GENERATION_CAP;
+
 void print_usage(const char* program, std::ostream& out) {
     out << "Usage: " << program << " [max_depth] [log_level]\n"
-        << "  max_depth   maximum expression depth to search (integer >= 2, default "
-        << DEFAULT_MAX_DEPTH << ")\n"
+        << "  max_depth   maximum expression depth to search (integer >= 2, at most "
+        << MAX_SEARCH_DEPTH << ", default " << DEFAULT_MAX_DEPTH << ")\n"
         << "  log_level   SILENT | RESULT | INFO | DEBUG (default INFO)\n"
         << "The target value is entered interactively after startup.\n";
 }
@@ -93,6 +98,11 @@ int main(int argc, char** argv) {
         case ParseResult::Help:  print_usage(argv[0], std::cout); return 0;
         case ParseResult::Error: print_usage(argv[0], std::cerr); return 1;
         case ParseResult::Ok:    break;
+    }
+    if (max_depth > MAX_SEARCH_DEPTH) {
+        std::cerr << "max_depth " << max_depth << " exceeds the deepest searchable depth " << MAX_SEARCH_DEPTH
+                  << " (two depth-" << GENERATION_CAP << " subtrees); capping to " << MAX_SEARCH_DEPTH << ".\n";
+        max_depth = MAX_SEARCH_DEPTH;
     }
     Log::set_level(level);
 

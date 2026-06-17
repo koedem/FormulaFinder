@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -41,6 +42,10 @@ public:
     static FormulaData search(size_t depth, const std::vector<std::vector<Real>>& sources, Real to_find) {
         FormulaData best{};
         best.absolute_difference = std::abs(to_find) + 10;
+        // The deepest satisfiable depth reuses two of the deepest available tiers; beyond it no operand pairing
+        // passes larger_depth * 2 >= depth, so best would stay un-updated and reconstruction would have nothing to
+        // rebuild. The caller (main) caps max_depth so this never happens.
+        assert(depth <= 2 * (sources.size() - 1));
         size_t larger_depth = depth - 1;
         if (larger_depth >= sources.size()) {
             LOG_AT(LogLevel::INFO) << "Jumping from search depth " << larger_depth << " down to " << sources.size() - 1 << std::endl;
