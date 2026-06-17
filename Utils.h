@@ -25,7 +25,7 @@ public:
             return sorted.size() - 1;
         } else {
             size_t low = 0, high = sorted.size() - 1;
-            while (low < high - 1) {
+            while (low + 1 < high) { // low + 1 < high, not low < high - 1: the latter underflows when high == 0.
                 size_t middle = (low + high) / 2;
                 if (sorted[middle] > to_find) {
                     high = middle;

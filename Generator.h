@@ -48,8 +48,9 @@ public:
         assert(values_per_depth.size() == depth);
         values_per_depth.emplace_back(std::vector<Real>());
         std::vector<Real>& result = values_per_depth[depth];
-        // Size the tier once, exactly: no reallocation while generating, and since the reserved-but-unwritten tail
-        // never faults in, resident memory stays bounded by the live element count rather than the reservation.
+        // Size the tier once, to an upper bound: no reallocation while generating (push_finite only ever drops
+        // values, never adds), and since the reserved-but-unwritten tail never faults in, resident memory stays
+        // bounded by the live element count rather than the reservation.
         result.reserve(planned_output_size(values_per_depth, depth));
         SimpleClock clock;
         size_t large_half = depth - 1;
@@ -133,17 +134,18 @@ private:
         return static_cast<size_t>(v.end() - std::lower_bound(v.begin(), v.end(), 0.0));
     }
 
-    // Exactly how many values generator(s1, s2, ...) appends: six results per pair, plus pow(a, b) for each a > 0,
-    // pow(b, a) for each b > 0, and one log(a) per a > 0. Mirrors generator's branches.
+    // Upper bound on how many values generator(s1, s2, ...) appends: six results per pair, plus pow(a, b) for each
+    // a > 0, pow(b, a) for each b > 0, and one log(a) per a > 0. Mirrors generator's branches; the actual count is
+    // this minus whatever push_finite drops as non-finite.
     static size_t generator_output_size(const std::vector<Real>& s1, const std::vector<Real>& s2) {
         const size_t n1 = s1.size(), n2 = s2.size();
         const size_t pos1 = count_positive(s1), pos2 = count_positive(s2);
         return 6 * n1 * n2 + pos1 * n2 + n1 * pos2 + pos1;
     }
 
-    // Total number of values generate_values will append for this depth, before any pruning -- the exact capacity
-    // the result tier needs. Mirrors the chunk sequence of generate_values (binary combinations, then the unary
-    // sqrt pass, then the seeded constants at depth 2), so the two must be kept in step.
+    // Upper bound on the values generate_values will append for this depth, before non-finite filtering and
+    // pruning -- the capacity to reserve. Mirrors the chunk sequence of generate_values (binary combinations, then
+    // the unary sqrt pass, then the seeded constants at depth 2), so the two must be kept in step.
     static size_t planned_output_size(const std::vector<std::vector<Real>>& values_per_depth, size_t depth) {
         size_t total = 0;
         size_t large_half = depth - 1;
@@ -169,32 +171,43 @@ private:
         clock.start();
         for (Real a : source1) {
             for (Real b : source2) {
-                result.emplace_back(a + b);
-                result.emplace_back(a - b);
-                result.emplace_back(b - a);
-                result.emplace_back(a * b);
-                result.emplace_back(a / b);
-                result.emplace_back(b / a);
+                push_finite(result, a + b);
+                push_finite(result, a - b);
+                push_finite(result, b - a);
+                push_finite(result, a * b);
+                push_finite(result, a / b); // b == 0 yields inf, and 0 / 0 a NaN -- push_finite drops both.
+                push_finite(result, b / a);
                 if (a > 0) { // For negative values of a, this can lead to NaNs. In general not much reason to use these type of values.
-                    result.emplace_back(std::pow(a, b));
+                    push_finite(result, std::pow(a, b));
                 }
                 if (b > 0) {
-                    result.emplace_back(std::pow(b, a));
+                    push_finite(result, std::pow(b, a));
                 }
             }
             if (a > 0) {
-                result.emplace_back(std::log(a)); // sqrt is generated separately as a unary pass; natural log stays here.
+                push_finite(result, std::log(a)); // sqrt is generated separately as a unary pass; natural log stays here.
             }
         }
         LOG_AT(LogLevel::INFO) << clock.end() << " seconds, end generation." << std::endl;
     }
 
+    // Appends value only if it is finite, establishing the invariant that the tiers never hold inf or NaN. Division
+    // by zero (inf, or NaN for 0 / 0) and overflowing products/powers are filtered here, at the single point where
+    // values enter a tier, so no non-finite value ever reaches the std::sort in integrate_chunk (sorting a range
+    // containing NaN is undefined behaviour). The reservation in generate_values is an upper bound, so dropping
+    // values here only leaves some reserved-but-unwritten tail; it never forces a reallocation.
+    static void push_finite(std::vector<Real>& result, Real value) {
+        if (std::isfinite(value)) {
+            result.emplace_back(value);
+        }
+    }
+
     /**
-     * This function removes all duplicate and non-finite values from a sorted vector, in place. A write cursor
-     * compacts the survivors toward the front and the tail is dropped with resize, so no second buffer is allocated
-     * (the capacity is retained for the next chunk). Equivalent to keeping each value that is finite and differs
-     * from the previous survivor.
-     * @param values in ascending order, not containing any NaN values.
+     * This function removes duplicate values from a sorted vector, in place. A write cursor compacts the survivors
+     * toward the front and the tail is dropped with resize, so no second buffer is allocated (the capacity is
+     * retained for the next chunk). Keeps each value that differs from the previous survivor. Non-finite values are
+     * already excluded at insertion (see push_finite), so this only deduplicates.
+     * @param values in ascending order, containing only finite values.
      */
     static void prune_duplicates(std::vector<Real> &values) {
         SimpleClock clock;
@@ -204,7 +217,7 @@ private:
         size_t write = 0;
         for (size_t read = 0; read < values.size(); read++) {
             const Real v = values[read];
-            if (std::isfinite(v) && (write == 0 || v != values[write - 1])) {
+            if (write == 0 || v != values[write - 1]) {
                 values[write++] = v;
             }
         }
