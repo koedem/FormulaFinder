@@ -128,6 +128,22 @@ private:
         if (iLo >= iHi || jLo >= jHi) {
             return;
         }
+        // Range prune: OP is monotone in each operand across this block, so every value it produces lies within the
+        // span of the four corners. If even the nearest point of that span is no closer to to_find than the current
+        // best, no cell here can improve it -- skip the whole O(width + height) sweep. Skipping on a tie is safe
+        // since update_best requires a strict improvement; non-finite corners fall back to sweeping.
+        const Real c00 = Operators::apply_operator<OP>(large[iLo],     small[jLo]);
+        const Real c01 = Operators::apply_operator<OP>(large[iLo],     small[jHi - 1]);
+        const Real c10 = Operators::apply_operator<OP>(large[iHi - 1], small[jLo]);
+        const Real c11 = Operators::apply_operator<OP>(large[iHi - 1], small[jHi - 1]);
+        if (std::isfinite(c00) && std::isfinite(c01) && std::isfinite(c10) && std::isfinite(c11)) {
+            const Real lo = std::min({c00, c01, c10, c11});
+            const Real hi = std::max({c00, c01, c10, c11});
+            const Real dist = std::max<Real>(0, std::max(lo - to_find, to_find - hi));
+            if (dist >= best.absolute_difference) {
+                return;
+            }
+        }
         constexpr int jDir = (SA == SB) ? -1 : 1; // j descends when both signs agree, ascends otherwise.
         size_t i = iLo;
         size_t j = (jDir < 0) ? jHi - 1 : jLo;
